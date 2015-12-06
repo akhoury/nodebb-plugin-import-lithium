@@ -1,41 +1,4 @@
 
-
-/*
-
-
- SELECT metrics2.id as id, name, value FROM metrics2_name JOIN metrics2 ON metrics2_name.id = metrics2.name_id limit 1000
-
-
-
- SELECT
- message2.id as _pid,
- title.node_id as _tid, // WRONG< LOOKS MORE LIKE A CID, see root_id and parent_id
- message2.user_id as _uid,
- message2_content.body as _content,
- message2.post_date as _datetime,
- message2.deleted as _deleted,
-
- title.nvalue as _board_title,
- message2.root_id as _l_root_id,
- message2.parent_id as _l_parent_id,
- message2_content.unique_id as _l_uuid,
- message2_content.subject as _l_subject,
- message2_content.teaser as _l_teaser,
- nodes.parent_node_id _l_parent_node_id,
- nodes.type_id as _l_type_id,
- nodes.display_id as _l_display_id
-
-
- FROM message2
- LEFT JOIN nodes ON nodes.node_id = message2.node_id
- LEFT JOIN settings AS title ON title.node_id = message2.node_id AND title.param="board.title"
- LEFT JOIN message2_content ON message2_content.unique_id = message2.unique_id
-
- LIMIT 1000
-
-
- */
-
 var async = require('async');
 var mysql = require('mysql');
 var _ = require('underscore');
@@ -95,40 +58,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 		});
 	};
 
-
-	Exporter.getGroups = function(callback) {
-		return Exporter.getPaginatedGroups(0, -1, callback);
-	};
-
-	Exporter.getPaginatedGroups = function(start, limit, callback) {
-		callback = !_.isFunction(callback) ? noop : callback;
-
-		var prefix = Exporter.config('prefix') || '';
-		var startms = +new Date();
-
-		var query = 'SELECT '
-				+ prefix + 'roles.id as _gid, '
-				+ prefix + 'roles.name as _name '
-				+ ' FROM ' + prefix + 'roles '
-
-				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
-
-		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					//normalize here
-					var map = {};
-					rows.forEach(function(row) {
-						map[row._gid] = row;
-					});
-
-					callback(null, map);
-				});
-	};
-
 	Exporter.countUsers = function (callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 
@@ -167,10 +96,12 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				+ prefix + 'users_dec.last_visit_time as _lastonline, ' + '\n'
 
 				// + prefix + 'users_dec.metrics_id as _l_metrics_id, ' + '\n'
+
+				// todo: need to figure out how to map those rankings
 				// + prefix + 'users_dec.ranking_id as _l_ranking_id, ' + '\n'
 
-				+ 'rankings.equals_role as _level, ' + '\n'
 				+ 'rankings.rank_name as _rank, ' + '\n'
+				+ 'rankings.equals_role as _level, ' + '\n'
 
 				+ 'website.nvalue as _website, ' + '\n'
 				+ 'location.nvalue as _location, ' + '\n'
@@ -210,75 +141,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				});
 	};
 
-	Exporter.countMessages = function(callback) {
-		callback = !_.isFunction(callback) ? noop : callback;
-		var prefix = Exporter.config('prefix');
-
-		var query = 'SELECT count(*) '
-				+ 'FROM ' + prefix + 'pm '
-				+ 'LEFT JOIN ' + prefix + 'pmtext ON ' + prefix + 'pmtext.pmtextid=' + prefix + 'pm.pmtextid ';
-
-		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					callback(null, rows[0]['count(*)']);
-				});
-	};
-
-	Exporter.getMessages = function(callback) {
-		return Exporter.getPaginatedMessages(0, -1, callback);
-	};
-
-	Exporter.getPaginatedMessages = function(start, limit, callback) {
-		callback = !_.isFunction(callback) ? noop : callback;
-
-		var startms = +new Date();
-		var prefix = Exporter.config('prefix') || '';
-		var query = 'SELECT '
-				+ prefix + 'pm.pmid as _mid, '
-				+ prefix + 'pmtext.fromuserid as _fromuid, '
-				+ prefix + 'pm.userid as _touid, '
-				+ prefix + 'pmtext.message as _content, '
-				+ prefix + 'pmtext.dateline as _timestamp '
-				+ 'FROM ' + prefix + 'pm '
-				+ 'LEFT JOIN ' + prefix + 'pmtext ON ' + prefix + 'pmtext.pmtextid=' + prefix + 'pm.pmtextid '
-				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
-
-		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					//normalize here
-					var map = {};
-					rows.forEach(function(row) {
-						row._timestamp = ((row._timestamp || 0) * 1000) || startms;
-						map[row._mid] = row;
-					});
-
-					callback(null, map);
-				});
-	};
-
-	Exporter.countCategories = function(callback) {
-		callback = !_.isFunction(callback) ? noop : callback;
-		var prefix = Exporter.config('prefix');
-		var query = 'SELECT count(*) FROM ' + prefix + 'forum ';
-
-		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					callback(null, rows[0]['count(*)']);
-				});
-	};
-
 	Exporter.getCategories = function(callback) {
 		return Exporter.getPaginatedCategories(0, -1, callback);
 	};
@@ -289,12 +151,17 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 		var prefix = Exporter.config('prefix');
 		var startms = +new Date();
 
-		var query = 'SELECT '
-				+ prefix + 'forum.forumid as _cid, '
-				+ prefix + 'forum.title as _name, '
-				+ prefix + 'forum.description as _description, '
-				+ prefix + 'forum.displayorder as _order '
-				+ 'FROM ' + prefix + 'forum ' // filter added later
+		var query = ''
+				+ 'SELECT ' + '\n'
+				+ 'category.node_id as _cid, ' + '\n'
+				+ prefix + 'nodes.parent_node_id as _parentCid, ' + '\n'
+				+ 'category.nvalue as _name ' + '\n'
+
+				+ 'FROM ' + prefix + 'nodes ' + '\n'
+
+				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'nodes.node_id '
+				+ 'AND (category.param="board.title" OR category.param="category.title") ' + '\n'
+
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
@@ -306,10 +173,9 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 					//normalize here
 					var map = {};
-					rows.forEach(function(row) {
-						row._name = row._name || 'Untitled Category ';
-						row._description = row._description || 'No decsciption available';
-						row._timestamp = ((row._timestamp || 0) * 1000) || startms;
+					rows.forEach(function(row, i) {
+						row._name = row._name || 'Untitled Category';
+						row._description = row._description || '';
 						map[row._cid] = row;
 					});
 
@@ -320,9 +186,9 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 	Exporter.countTopics = function(callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix');
-		var query = 'SELECT count(*) '
-				+ 'FROM ' + prefix + 'thread '
-				+ 'JOIN ' + prefix + 'post ON ' + prefix + 'thread.firstpostid=' + prefix + 'post.postid ';
+		var query = 'SELECT count(*) ' + '\n'
+				+ 'FROM ' + prefix + 'message2 ' + '\n'
+				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n';
 
 		Exporter.query(query,
 				function(err, rows) {
@@ -342,21 +208,20 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 		var prefix = Exporter.config('prefix');
 		var startms = +new Date();
-		var query = 'SELECT '
-				+ prefix + 'thread.threadid as _tid, '
-				+ prefix + 'post.userid as _uid, '
-				+ prefix + 'thread.firstpostid as _pid, '
-				+ prefix + 'thread.forumid as _cid, '
-				+ prefix + 'post.title as _title, '
-				+ prefix + 'post.pagetext as _content, '
-				+ prefix + 'post.username as _guest, '
-				+ prefix + 'post.ipaddress as _ip, '
-				+ prefix + 'post.dateline as _timestamp, '
-				+ prefix + 'thread.views as _viewcount, '
-				+ prefix + 'thread.open as _open, '
-				+ prefix + 'thread.sticky as _pinned '
-				+ 'FROM ' + prefix + 'thread '
-				+ 'JOIN ' + prefix + 'post ON ' + prefix + 'thread.firstpostid=' + prefix + 'post.postid '
+
+		var query = ''
+				+ 'SELECT ' + '\n'
+				+ prefix + 'message2.id as _tid, ' + '\n'
+				+ 'category.node_id as _cid, ' + '\n'
+				+ prefix + 'message2.user_id as _uid, ' + '\n'
+				+ prefix + 'message2_content.subject as _title, ' + '\n'
+				+ prefix + 'message2_content.body as _content, ' + '\n'
+				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
+				+ prefix + 'message2.deleted as _deleted ' + '\n'
+				+ 'FROM ' + prefix + 'message2 ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND category.param="board.title" ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
+				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
@@ -383,8 +248,9 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 	Exporter.countPosts = function(callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix');
-		var query = 'SELECT count(*)  '
-				+ 'FROM ' + prefix + 'post WHERE ' + prefix + 'post.parentid<>0 ';
+		var query = 'SELECT count(*) ' + '\n'
+				+ 'FROM ' + prefix + 'message2 ' + '\n'
+				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n';
 
 		Exporter.query(query,
 				function(err, rows) {
@@ -396,27 +262,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				});
 	};
 
-	var processFirstPostsHash = function(arr) {
-		var hash = {};
-		arr.forEach(function(topic) {
-			hash[topic._pid] = 1;
-		});
-		Exporter.firstPostsHash = hash;
-		return hash;
-	};
-
-	var getFirstPostsHash = function(callback) {
-		if (Exporter.firstPostsHash) {
-			return callback(null, Exporter.firstPostsHash)
-		}
-
-		Exporter.getTopics(function(err, map, arr) {
-			if (err) return callback(err);
-
-			callback(null, processFirstPostsHash(arr));
-		});
-	};
-
 	Exporter.getPosts = function(callback) {
 		return Exporter.getPaginatedPosts(0, -1, callback);
 	};
@@ -426,45 +271,80 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 		var prefix = Exporter.config('prefix');
 		var startms = +new Date();
-		var query = 'SELECT '
-				+ prefix + 'post.postid as _pid, '
-				+ prefix + 'post.threadid as _tid, '
-				+ prefix + 'post.userid as _uid, '
-				+ prefix + 'post.username as _guest, '
-				+ prefix + 'post.ipaddress as _ip, '
-				+ prefix + 'post.pagetext as _content, '
-				+ prefix + 'post.dateline as _timestamp '
-				+ 'FROM ' + prefix + 'post WHERE ' + prefix + 'post.parentid<>0 '
+
+		var query = ''
+				+ 'SELECT ' + '\n'
+				+ prefix + 'message2.id as _pid, ' + '\n'
+				+ prefix + 'message2.root_id as _tid, ' + '\n'
+				+ prefix + 'message2.user_id as _uid, ' + '\n'
+				+ prefix + 'message2.parent_id as _toPid, ' + '\n'
+				+ prefix + 'message2_content.body as _content, ' + '\n'
+				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
+				+ prefix + 'message2.deleted as _deleted ' + '\n'
+				+ 'FROM ' + prefix + 'message2 ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
+				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
+
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
-		getFirstPostsHash(function(err, topicsPids) {
-			if (err) {
-				return callback(err);
-			}
+		Exporter.query(query,
+				function(err, rows) {
+					if (err) {
+						Exporter.error(err);
+						return callback(err);
+					}
 
-			Exporter.query(query,
-					function(err, rows) {
-						if (err) {
-							Exporter.error(err);
-							return callback(err);
+					//normalize here
+					var map = {};
+					rows.forEach(function(row) {
+						if (row._tid === row._toPid) {
+							delete row._toPid;
 						}
 
-						//normalize here
-						var map = {};
-						rows.forEach(function(row) {
-							if (topicsPids[row._pid]) {
-								return;
-							}
-
-							row._content = row._content || '';
-							row._timestamp = ((row._timestamp || 0) * 1000) || startms;
-							map[row._pid] = row;
-						});
-
-						callback(null, map);
+						row._content = row._content || '';
+						map[row._pid] = row;
 					});
-		});
+
+					callback(null, map);
+				});
 	};
+
+
+	// todo
+	Exporter.xxxgetGroups = function(callback) {
+		return Exporter.getPaginatedGroups(0, -1, callback);
+	};
+
+	// todo
+	Exporter.xxxgetPaginatedGroups = function(start, limit, callback) {
+		callback = !_.isFunction(callback) ? noop : callback;
+
+		var prefix = Exporter.config('prefix') || '';
+		var startms = +new Date();
+
+		var query = 'SELECT '
+				+ prefix + 'roles.id as _gid, '
+				+ prefix + 'roles.name as _name '
+				+ ' FROM ' + prefix + 'roles '
+
+				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+
+		Exporter.query(query,
+				function(err, rows) {
+					if (err) {
+						Exporter.error(err);
+						return callback(err);
+					}
+					//normalize here
+					var map = {};
+					rows.forEach(function(row) {
+						map[row._gid] = row;
+					});
+
+					callback(null, map);
+				});
+	};
+
 
 	Exporter.teardown = function(callback) {
 		Exporter.log('teardown');
@@ -485,18 +365,15 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 			function(next) {
 				Exporter.getUsers(next);
 			},
-			//function(next) {
-			//	Exporter.getMessages(next);
-			//},
-			//function(next) {
-			//	Exporter.getCategories(next);
-			//},
-			//function(next) {
-			//	Exporter.getTopics(next);
-			//},
-			//function(next) {
-			//	Exporter.getPosts(next);
-			//},
+			function(next) {
+				Exporter.getCategories(next);
+			},
+			function(next) {
+				Exporter.getTopics(next);
+			},
+			function(next) {
+				Exporter.getPosts(next);
+			},
 			function(next) {
 				Exporter.teardown(next);
 			}
