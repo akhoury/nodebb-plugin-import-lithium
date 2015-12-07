@@ -95,6 +95,10 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				+ prefix + 'users_dec.registration_time as _joindate, ' + '\n'
 				+ prefix + 'users_dec.last_visit_time as _lastonline, ' + '\n'
 
+				+ 'bans.deleted as _deleted, ' + '\n'
+				+ 'bans.date_start as _l_ban_date_start, ' + '\n'
+				+ 'bans.date_end as _l_ban_date_end, ' + '\n'
+
 				// + prefix + 'users_dec.metrics_id as _l_metrics_id, ' + '\n'
 
 				// todo: need to figure out how to map those rankings
@@ -110,7 +114,7 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				+ 'FROM ' + prefix + 'users_dec ' + '\n'
 
 				+ 'LEFT JOIN ' + prefix + 'user_rankings AS rankings ON rankings.id=' + prefix + 'users_dec.ranking_id ' + '\n'
-
+				+ 'LEFT JOIN ' + prefix + 'user_bans AS bans ON bans.user_id=' + prefix + 'users_dec.id ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS website ON website.user_id=' + prefix + 'users_dec.id AND website.param="profile.url_homepage" ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS location ON location.user_id=' + prefix + 'users_dec.id AND location.param="profile.location" ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS signature ON signature.user_id=' + prefix + 'users_dec.id AND signature.param="profile.signature" ' + '\n'
@@ -131,8 +135,13 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 						// lower case the email for consistency
 						row._email = (row._email || '').toLowerCase();
-
 						row._website = Exporter.validateUrl(row._website);
+
+						// if
+						// the user was deleted, ban that user
+						// or if the ban ends if the future, ban that user
+						// or if the ban starts if the future, ban that user
+						row._banned = row._deleted || (row._l_ban_date_start && row._l_ban_date_start > startms) || (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
 
 						map[row._uid] = row;
 					});
@@ -211,17 +220,20 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 		var query = ''
 				+ 'SELECT ' + '\n'
-				+ prefix + 'message2.id as _tid, ' + '\n'
+				+ prefix + 'message2.unique_id as _tid, ' + '\n'
+				+ prefix + 'message2.id as _id, ' + '\n'
 				+ 'category.node_id as _cid, ' + '\n'
 				+ prefix + 'message2.user_id as _uid, ' + '\n'
 				+ prefix + 'message2_content.subject as _title, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
+				+ prefix + 'message2.edited as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND category.param="board.title" ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
 				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
+				+ 'AND ' + prefix + 'message2.user_id > -1 '+ '\n'
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
@@ -233,11 +245,8 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 					//normalize here
 					var map = {};
-					rows.forEach(function(row) {
-						row._title = row._title ? row._title[0].toUpperCase() + row._title.substr(1) : 'Untitled';
-						row._timestamp = ((row._timestamp || 0) * 1000) || startms;
-						row._locked = row._open ? 0 : 1;
-
+					rows.forEach(function(row, i) {
+						row._title = row._title || 'Untitled Topic ' + (i+1);
 						map[row._tid] = row;
 					});
 
@@ -274,16 +283,18 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 		var query = ''
 				+ 'SELECT ' + '\n'
-				+ prefix + 'message2.id as _pid, ' + '\n'
+				+ prefix + 'message2.unique_id as _pid, ' + '\n'
 				+ prefix + 'message2.root_id as _tid, ' + '\n'
 				+ prefix + 'message2.user_id as _uid, ' + '\n'
 				+ prefix + 'message2.parent_id as _toPid, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
+				+ prefix + 'message2.edited as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
 				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
+				+ 'AND ' + prefix + 'message2.user_id > -1 '+ '\n'
 
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
@@ -293,15 +304,13 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 						Exporter.error(err);
 						return callback(err);
 					}
-
 					//normalize here
 					var map = {};
 					rows.forEach(function(row) {
 						if (row._tid === row._toPid) {
 							delete row._toPid;
 						}
-
-						row._content = row._content || '';
+						row._content = row._content || '[no-content]';
 						map[row._pid] = row;
 					});
 
