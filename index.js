@@ -221,13 +221,12 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 		var query = ''
 				+ 'SELECT ' + '\n'
 				+ prefix + 'message2.unique_id as _tid, ' + '\n'
-				+ prefix + 'message2.id as _id, ' + '\n'
 				+ 'category.node_id as _cid, ' + '\n'
 				+ prefix + 'message2.user_id as _uid, ' + '\n'
 				+ prefix + 'message2_content.subject as _title, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
-				+ prefix + 'message2.edited as _edited, ' + '\n'
+				+ prefix + 'message2.edit_date as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND category.param="board.title" ' + '\n'
@@ -289,7 +288,7 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				+ prefix + 'message2.parent_id as _toPid, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
-				+ prefix + 'message2.edited as _edited, ' + '\n'
+				+ prefix + 'message2.edit_date as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
@@ -399,9 +398,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 			},
 			function(next) {
 				Exporter.getPaginatedUsers(0, 1000, next);
-			},
-			function(next) {
-				Exporter.getPaginatedMessages(0, 1000, next);
 			},
 			function(next) {
 				Exporter.getPaginatedCategories(0, 1000, next);
