@@ -49,10 +49,10 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 			return callback(err);
 		}
 
-		console.log('\n\n====QUERY====\n\n' + query + '\n');
+		// console.log('\n\n====QUERY====\n\n' + query + '\n');
 		Exporter.connection.query(query, function(err, rows) {
 			if (rows) {
-				console.log('returned: ' + rows.length + ' results');
+				// console.log('returned: ' + rows.length + ' results');
 			}
 			callback(err, rows)
 		});
@@ -87,25 +87,25 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 		var query = ''
 				+ 'SELECT '
 				+ prefix + 'users_dec.id as _uid, ' + '\n'
-				+ prefix + 'users_dec.secure_id as _suid, ' + '\n'
+				//+ prefix + 'users_dec.secure_id as _suid, ' + '\n'
 				+ prefix + 'users_dec.nlogin as _username, ' + '\n'
 				+ prefix + 'users_dec.login_canon as _alternativeUsername, ' + '\n'
-				+ prefix + 'users_dec.npasswd as _hashed_password, ' + '\n'
+				//+ prefix + 'users_dec.npasswd as _hashed_password, ' + '\n'
 				+ prefix + 'users_dec.email as _email, ' + '\n'
 				+ prefix + 'users_dec.registration_time as _joindate, ' + '\n'
 				+ prefix + 'users_dec.last_visit_time as _lastonline, ' + '\n'
 
 				+ 'bans.deleted as _deleted, ' + '\n'
-				+ 'bans.date_start as _l_ban_date_start, ' + '\n'
-				+ 'bans.date_end as _l_ban_date_end, ' + '\n'
+				//+ 'bans.date_start as _l_ban_date_start, ' + '\n'
+				//+ 'bans.date_end as _l_ban_date_end, ' + '\n'
 
 				// + prefix + 'users_dec.metrics_id as _l_metrics_id, ' + '\n'
-
 				// todo: need to figure out how to map those rankings
 				// + prefix + 'users_dec.ranking_id as _l_ranking_id, ' + '\n'
 
 				+ 'rankings.rank_name as _rank, ' + '\n'
 				+ 'rankings.equals_role as _level, ' + '\n'
+				+ 'roles.name as _role, ' + '\n'
 
 				+ 'website.nvalue as _website, ' + '\n'
 				+ 'location.nvalue as _location, ' + '\n'
@@ -113,11 +113,14 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 
 				+ 'FROM ' + prefix + 'users_dec ' + '\n'
 
+				+ 'LEFT JOIN ' + prefix + 'user_role AS role ON role.role_id=' + prefix + 'users_dec.id ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'roles AS roles ON roles.id=role.role_id ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_rankings AS rankings ON rankings.id=' + prefix + 'users_dec.ranking_id ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_bans AS bans ON bans.user_id=' + prefix + 'users_dec.id ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS website ON website.user_id=' + prefix + 'users_dec.id AND website.param="profile.url_homepage" ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS location ON location.user_id=' + prefix + 'users_dec.id AND location.param="profile.location" ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS signature ON signature.user_id=' + prefix + 'users_dec.id AND signature.param="profile.signature" ' + '\n'
+				+ 'GROUP BY ' + prefix + 'users_dec.id ' + '\n'
 
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
@@ -136,6 +139,11 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 						// lower case the email for consistency
 						row._email = (row._email || '').toLowerCase();
 						row._website = Exporter.validateUrl(row._website);
+
+						var gid = row._level || row._role;
+						if (gid && gid.toLowerCase() !== "administrator") {
+							row._groups = [gid];
+						}
 
 						// if
 						// the user was deleted, ban that user
@@ -318,23 +326,27 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 	};
 
 
-	// todo
-	Exporter.xxxgetGroups = function(callback) {
+	Exporter.getGroups = function(callback) {
 		return Exporter.getPaginatedGroups(0, -1, callback);
 	};
 
-	// todo
-	Exporter.xxxgetPaginatedGroups = function(start, limit, callback) {
+	Exporter.getPaginatedGroups = function(start, limit, callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 
 		var prefix = Exporter.config('prefix') || '';
 		var startms = +new Date();
 
 		var query = 'SELECT '
-				+ prefix + 'roles.id as _gid, '
-				+ prefix + 'roles.name as _name '
-				+ ' FROM ' + prefix + 'roles '
 
+				// use the name as gid and group by name, since there seems to be duplicate groups names
+				// then in getUsers, use the names in _groups
+				+ prefix + 'roles.name as _gid, '
+
+				+ prefix + 'roles.name as _name '
+
+				+ 'FROM ' + prefix + 'roles '
+				+ 'WHERE ' + prefix + 'roles.name != "Administrator" '
+				+ 'GROUP BY ' + prefix + 'roles.name '
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
@@ -367,9 +379,9 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 			function(next) {
 				Exporter.setup(config, next);
 			},
-			//function(next) {
-			//	Exporter.getGroups(next);
-			//},
+			function(next) {
+				Exporter.getGroups(next);
+			},
 			function(next) {
 				Exporter.getUsers(next);
 			},
