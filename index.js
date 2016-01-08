@@ -1,6 +1,9 @@
 
 var async = require('async');
 var mysql = require('mysql');
+
+//var utils = module.parent.require('../../public/src/utils.js');
+
 var _ = require('underscore');
 var noop = function(){};
 var logPrefix = '[nodebb-plugin-import-lithium]';
@@ -191,8 +194,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 					//normalize here
 					var map = {};
 					rows.forEach(function(row, i) {
-						row._name = row._name || 'Untitled Category';
-						row._description = row._description || '';
 						map[row._cid] = row;
 					});
 
@@ -253,7 +254,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 					//normalize here
 					var map = {};
 					rows.forEach(function(row, i) {
-						row._title = row._title || 'Untitled Topic ' + (i+1);
 						map[row._tid] = row;
 					});
 
@@ -317,7 +317,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 						if (row._tid === row._toPid) {
 							delete row._toPid;
 						}
-						row._content = row._content || '[no-content]';
 						map[row._pid] = row;
 					});
 
