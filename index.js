@@ -246,7 +246,7 @@ var RTRIMREGEX = /\s+$/g;
 				+ prefix + 'message2.edit_date as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id (category.param="board.title" OR category.param="category.title") ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND (category.param="board.title" OR category.param="category.title") ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
 				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
 				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
