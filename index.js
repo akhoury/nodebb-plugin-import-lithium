@@ -8,6 +8,9 @@ var _ = require('underscore');
 var noop = function(){};
 var logPrefix = '[nodebb-plugin-import-lithium]';
 
+var PLACEHOLDER = '___________________________placeholder___________________________';
+var RTRIMREGEX = /\s+$/g;
+
 (function(Exporter) {
 
 	var csvToArray = function(v) {
@@ -52,10 +55,11 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 			return callback(err);
 		}
 
-		// console.log('\n\n====QUERY====\n\n' + query + '\n');
+		var startms = +new Date();
+		console.log('\n\n====QUERY====\n\n' + query + '\n');
 		Exporter.connection.query(query, function(err, rows) {
 			if (rows) {
-				// console.log('returned: ' + rows.length + ' results');
+				console.log('returned: ' + rows.length + ' results in: ' + ((+new Date) - startms) + 'ms');
 			}
 			callback(err, rows)
 		});
@@ -102,7 +106,6 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				//+ 'bans.date_start as _l_ban_date_start, ' + '\n'
 				//+ 'bans.date_end as _l_ban_date_end, ' + '\n'
 
-				// + prefix + 'users_dec.metrics_id as _l_metrics_id, ' + '\n'
 				// todo: need to figure out how to map those rankings
 				// + prefix + 'users_dec.ranking_id as _l_ranking_id, ' + '\n'
 
@@ -144,8 +147,12 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 						row._website = Exporter.validateUrl(row._website);
 
 						var gid = row._level || row._role;
-						if (gid && gid.toLowerCase() !== "administrator") {
+						if (gid && gid.toLowerCase() !== "administrator" && gid.toLowerCase() !== "moderator") {
 							row._groups = [gid];
+						}
+
+						if (row._uid == 10) {
+							row._level = "moderator";
 						}
 
 						// if
@@ -241,7 +248,7 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND category.param="board.title" ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
 				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
-				+ 'AND ' + prefix + 'message2.user_id > -1 '+ '\n'
+				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
@@ -254,6 +261,8 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 					//normalize here
 					var map = {};
 					rows.forEach(function(row, i) {
+						row._title = row._title && row._title.replace(RTRIMREGEX, '') ? row._title : PLACEHOLDER;
+						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? row._content : PLACEHOLDER;
 						map[row._tid] = row;
 					});
 
@@ -301,7 +310,7 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
 				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
-				+ 'AND ' + prefix + 'message2.user_id > -1 '+ '\n'
+				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
 
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
@@ -317,6 +326,7 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 						if (row._tid === row._toPid) {
 							delete row._toPid;
 						}
+						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? row._content : PLACEHOLDER;
 						map[row._pid] = row;
 					});
 
@@ -408,18 +418,28 @@ var logPrefix = '[nodebb-plugin-import-lithium]';
 				Exporter.getPaginatedGroups(0, 1000, next);
 			},
 			function(next) {
-				Exporter.getPaginatedUsers(0, 1000, next);
+				console.log("groups");
+
+				Exporter.getPaginatedUsers(10000, 10250, next);
 			},
 			function(next) {
+				console.log("users");
+
 				Exporter.getPaginatedCategories(0, 1000, next);
 			},
 			function(next) {
+				console.log("categories");
+
 				Exporter.getPaginatedTopics(0, 1000, next);
 			},
 			function(next) {
+				console.log("topics");
+
 				Exporter.getPaginatedPosts(1001, 2000, next);
 			},
 			function(next) {
+				console.log("posts");
+
 				Exporter.teardown(next);
 			}
 		], callback);
