@@ -188,6 +188,7 @@ var RTRIMREGEX = /\s+$/g;
 
 				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'nodes.node_id '
 				+ 'AND (category.param="board.title" OR category.param="category.title") ' + '\n'
+				+ 'WHERE category.node_id IS NOT NULL \n'
 
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
