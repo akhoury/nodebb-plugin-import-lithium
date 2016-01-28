@@ -301,15 +301,19 @@ var RTRIMREGEX = /\s+$/g;
 		var query = ''
 				+ 'SELECT ' + '\n'
 				+ prefix + 'message2.unique_id as _pid, ' + '\n'
-				+ prefix + 'message2.root_id as _tid, ' + '\n'
+				+ 'topics.unique_id as _tid, ' + '\n'
+				+ 'parents.unique_id as _toPid, ' + '\n'
+
 				+ prefix + 'message2.user_id as _uid, ' + '\n'
-				+ prefix + 'message2.parent_id as _toPid, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
 				+ prefix + 'message2.edit_date as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'message2 AS topics ON topics.id = ' + prefix + 'message2.root_id AND topics.node_id = ' + prefix + 'message2.node_id  \n'
+				+ 'LEFT JOIN ' + prefix + 'message2 AS parents ON parents.id = ' + prefix + 'message2.parent_id AND parents.node_id = ' + prefix + 'message2.node_id  \n'
+
 				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
 				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
 
