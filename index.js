@@ -1,4 +1,5 @@
 
+var nodeExtend = require('node.extend');
 var async = require('async');
 var mysql = require('mysql');
 
@@ -39,11 +40,24 @@ var RTRIMREGEX = /\s+$/g;
 				config.custom = JSON.parse(config.custom)
 			} catch (e) {}
 		}
+		config.custom = nodeExtend(true, {}, {
+			timemachine: {
+				users: {},
+				topics: {},
+				categories: {},
+				posts: {}
+			}
+		}, config.custom);
+
 
 		Exporter.config('custom', config.custom || {});
 
 		Exporter.connection = mysql.createConnection(_config);
 		Exporter.connection.connect();
+		
+		setInterval(function() {
+			Exporter.connection.query("SELECT 1", function(){});
+		}, 60000);
 
 		callback(null, Exporter.config());
 	};
@@ -56,7 +70,7 @@ var RTRIMREGEX = /\s+$/g;
 		}
 
 		var startms = +new Date();
-		console.log('\n\n====QUERY====\n\n' + query + '\n');
+		console.log('\n\n====QUERY====\n\n' + (new Date()).toString() + '\n' + query + '\n');
 		Exporter.connection.query(query, function(err, rows) {
 			if (rows) {
 				console.log('returned: ' + rows.length + ' results in: ' + ((+new Date) - startms) + 'ms');
@@ -157,7 +171,7 @@ var RTRIMREGEX = /\s+$/g;
 
 						// if
 						// the user was deleted, ban that user
-						// or if the ban ends if the future, ban that user
+						// or if the ban ends  if the future, ban that user
 						// or if the ban starts if the future, ban that user
 						row._banned = row._deleted || (row._l_ban_date_start && row._l_ban_date_start > startms) || (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
 
@@ -273,10 +287,15 @@ var RTRIMREGEX = /\s+$/g;
 
 	Exporter.countPosts = function(callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
+		var timemachine = Exporter.config('custom').timemachine;
+		console.log(Exporter.config('custom'));
 		var prefix = Exporter.config('prefix');
 		var query = 'SELECT count(*) ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
-				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n';
+				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
+				+ (timemachine.posts.from ? ' AND ' + prefix + 'message2.post_date >= ' + timemachine.posts.from : '')
+                                + (timemachine.posts.to ? ' AND ' + prefix + 'message2.post_date <= ' + timemachine.posts.to : '');
+
 
 		Exporter.query(query,
 				function(err, rows) {
@@ -296,6 +315,7 @@ var RTRIMREGEX = /\s+$/g;
 		callback = !_.isFunction(callback) ? noop : callback;
 
 		var prefix = Exporter.config('prefix');
+		var timemachine = Exporter.config('custom').timemachine;
 		var startms = +new Date();
 
 		var query = ''
@@ -316,7 +336,9 @@ var RTRIMREGEX = /\s+$/g;
 
 				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
 				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
-
+				+ (timemachine.posts.from ? ' AND ' + prefix + 'message2.post_date >= ' + timemachine.posts.from : '')
+                                + (timemachine.posts.to ? ' AND ' + prefix + 'message2.post_date <= ' + timemachine.posts.to : '')
+				+ ' ORDER BY ' + prefix + 'message2.post_date \n'
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
