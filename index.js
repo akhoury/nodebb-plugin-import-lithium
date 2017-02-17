@@ -1,5 +1,5 @@
 
-var nodeExtend = require('node.extend');
+var extend = require('extend');
 var async = require('async');
 var mysql = require('mysql');
 
@@ -28,8 +28,10 @@ var RTRIMREGEX = /\s+$/g;
 			user: config.dbuser || config.user || 'user',
 			password: config.dbpass || config.pass || config.password || undefined,
 			port: config.dbport || config.port || 3306,
-			database: config.dbname || config.name || config.database || 'lithium'
-		};
+			database: config.dbname || config.name || config.database || 'lithium',
+            socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
+
+        };
 
 		Exporter.config(_config);
 		Exporter.config('prefix', config.prefix || config.tablePrefix || '');
@@ -40,7 +42,7 @@ var RTRIMREGEX = /\s+$/g;
 				config.custom = JSON.parse(config.custom)
 			} catch (e) {}
 		}
-		config.custom = nodeExtend(true, {}, {
+		config.custom = extend(true, {}, {
 			timemachine: {
 				users: {},
 				topics: {},
@@ -54,7 +56,7 @@ var RTRIMREGEX = /\s+$/g;
 
 		Exporter.connection = mysql.createConnection(_config);
 		Exporter.connection.connect();
-		
+
 		setInterval(function() {
 			Exporter.connection.query("SELECT 1", function(){});
 		}, 60000);
@@ -96,6 +98,36 @@ var RTRIMREGEX = /\s+$/g;
 				});
 	};
 
+
+	function geUsersProfileDec (callback) {
+        callback = !_.isFunction(callback) ? noop : callback;
+        var prefix = Exporter.config('prefix') || '';
+
+        Exporter.query('select * from user_profile_dec ', function(err, rows) {
+        	if (err) {
+        		return callback(err)
+			}
+			var map = {};
+			rows.forEach(function(row) {
+				map[row.user_id] = map[row.user_id] || {};
+				if (row.param == 'profile.location') {
+                    map[row.user_id].location = row.nvalue;
+                } else if (row.param == 'profile.signature') {
+                    map[row.user_id].signature = row.nvalue;
+                } else if (row.param == 'profile.url_homepage') {
+                    map[row.user_id].website = row.nvalue;
+                } else if (row.param == 'profile.url_icon' && row.nvalue && !/^avatar:/.test(row.nvalue)) {
+					//todo: i wonder if should be customizeable, via custom options or something, just in case someone didn't want to place them in /uploads/_imported_images ...
+					// one would then write a quick script to cahgne them, but still...
+					map[row.user_id].picture = row.nvalue
+						.replace(/\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/g, '/uploads/_imported_images/$1\?');
+				}
+            });
+            Exporter._usersProfileDec = map;
+			callback(null, map);
+		});
+    }
+
 	Exporter.getUsers = function(callback) {
 		return Exporter.getPaginatedUsers(0, -1, callback);
 	};
@@ -125,11 +157,7 @@ var RTRIMREGEX = /\s+$/g;
 
 				+ 'rankings.rank_name as _rank, ' + '\n'
 				+ 'rankings.equals_role as _level, ' + '\n'
-				+ 'roles.name as _role, ' + '\n'
-
-				+ 'website.nvalue as _website, ' + '\n'
-				+ 'location.nvalue as _location, ' + '\n'
-				+ 'signature.nvalue as _signature ' + '\n'
+				+ 'roles.name as _role ' + '\n'
 
 				+ 'FROM ' + prefix + 'users_dec ' + '\n'
 
@@ -137,49 +165,53 @@ var RTRIMREGEX = /\s+$/g;
 				+ 'LEFT JOIN ' + prefix + 'roles AS roles ON roles.id=role.role_id ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_rankings AS rankings ON rankings.id=' + prefix + 'users_dec.ranking_id ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'user_bans AS bans ON bans.user_id=' + prefix + 'users_dec.id ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS website ON website.user_id=' + prefix + 'users_dec.id AND website.param="profile.url_homepage" ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS location ON location.user_id=' + prefix + 'users_dec.id AND location.param="profile.location" ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'user_profile_dec AS signature ON signature.user_id=' + prefix + 'users_dec.id AND signature.param="profile.signature" ' + '\n'
+
 				+ 'GROUP BY ' + prefix + 'users_dec.id ' + '\n'
 
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
+		geUsersProfileDec(function(err, userProfileDecMap) {
+            Exporter.query(query,
+                function(err, rows) {
+                    if (err) {
+                        Exporter.error(err);
+                        return callback(err);
+                    }
 
-		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
+                    //normalize here
+                    var map = {};
+                    rows.forEach(function(row) {
 
-					//normalize here
-					var map = {};
-					rows.forEach(function(row) {
+                        // lower case the email for consistency
+                        row._email = (row._email || '').toLowerCase();
 
-						// lower case the email for consistency
-						row._email = (row._email || '').toLowerCase();
-						row._website = Exporter.validateUrl(row._website);
+                        var profile = userProfileDecMap[row._uid] || {};
+                        row._signature = profile.signature;
+                        row._location = profile.location;
+                        row._website = Exporter.validateUrl(profile.website);
+                        row._picture = profile.picture;
 
-						var gid = row._level || row._role;
-						if (gid && gid.toLowerCase() !== "administrator" && gid.toLowerCase() !== "moderator") {
-							row._groups = [gid];
-						}
+                        var gid = row._level || row._role;
+                        if (gid && gid.toLowerCase() !== "administrator" && gid.toLowerCase() !== "moderator") {
+                            row._groups = [gid];
+                        }
 
-						if (row._uid == 10) {
-							row._level = "moderator";
-						}
+                        if (row._uid == 10) {
+                            row._level = "moderator";
+                        }
 
-						// if
-						// the user was deleted, ban that user
-						// or if the ban ends  if the future, ban that user
-						// or if the ban starts if the future, ban that user
-						row._banned = row._deleted || (row._l_ban_date_start && row._l_ban_date_start > startms) || (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
+                        // if
+                        // the user was deleted, ban that user
+                        // or if the ban ends  if the future, ban that user
+                        // or if the ban starts if the future, ban that user
+                        row._banned = row._deleted || (row._l_ban_date_start && row._l_ban_date_start > startms) || (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
 
-						map[row._uid] = row;
-					});
+                        map[row._uid] = row;
+                    });
 
-					callback(null, map);
-				});
+                    callback(null, map);
+                });
+		});
 	};
 
 	Exporter.getCategories = function(callback) {
@@ -240,6 +272,73 @@ var RTRIMREGEX = /\s+$/g;
 				});
 	};
 
+	var pad = function (val, len) {
+		val = String(val);
+		len = len || 4;
+		while (val.length < len) val = "0" + val;
+		return val;
+	};
+
+	var generateAttachementUrlFromAid = function (_aid, options) {
+		options = options || {baseUrl: '/uploads/_imported_attachments/'};
+		var th = Math.floor(_aid / 1000)
+		var dir = pad(th, 4); // todo: what happens if the lithium folders go over 9999?
+
+		// todo: expose the baseUrl options from the UI via custom configs maybe?
+		// .dat ? really lithium?
+		return options.baseUrl + dir + '/' + pad(_aid, 4) + '.dat';
+
+	}
+
+	function filterNonImage (attachment) {
+		return !filterImage(attachment);
+	}
+	function filterImage (attachment) {
+		return /^image/.test(attachment.mime);
+	}
+
+	var getAttachmentsMap = function (callback) {
+		callback = !_.isFunction(callback) ? noop : callback;
+		var prefix = Exporter.config('prefix');
+
+		if (Exporter['_attachmentsMap']) {
+			return callback(null, Exporter['_attachmentsMap']);
+		}
+
+		var query = 'SELECT '
+			+ prefix + 'tblia_attachment.attachment_id as _aid, '
+			+ prefix + 'tblia_attachment.file_name as _fname, '
+			+ prefix + 'tblia_attachment.content_type as _mime, '
+			+ prefix + 'tblia_message_attachments.message_uid as _tpid, '
+			+ prefix + 'tblia_message_attachments.attach_num as _num '
+
+			+ 'FROM ' + prefix + 'tblia_attachment '
+			+ 'JOIN ' + prefix + 'tblia_message_attachments ON ' + prefix + 'tblia_message_attachments.attachment_id=' + prefix + 'tblia_attachment.attachment_id '
+
+		var byNum = function (a, b) {
+			return a.order - b.order;
+		};
+
+		Exporter.query(query,
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
+				var map = {};
+				rows.forEach(function(row) {
+					// use both, the tpid and the aid to make sure topic/post and the attachment ids match
+					map[row._tpid] = map[row._tpid] || [];
+					map[row._tpid].push({url: generateAttachementUrlFromAid(row._aid), filename: row._fname, order: row._num, mime: row._mime});
+					map[row._tpid].sort(byNum);
+				});
+
+				Exporter['_attachmentsMap'] = map;
+
+				callback(err, map);
+			});
+	};
+
 	Exporter.getTopics = function(callback) {
 		return Exporter.getPaginatedTopics(0, -1, callback);
 	};
@@ -256,17 +355,25 @@ var RTRIMREGEX = /\s+$/g;
 				+ prefix + 'message2.user_id as _uid, ' + '\n'
 				+ prefix + 'message2_content.subject as _title, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
+				+ prefix + 'message2.views as _views, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
 				+ prefix + 'message2.edit_date as _edited, ' + '\n'
-				+ prefix + 'message2.deleted as _deleted ' + '\n'
+				+ prefix + 'message2.deleted as _deleted, ' + '\n'
+				+ 'GROUP_CONCAT('+ prefix + 'tags.tag_text_canon) as _tags ' + '\n'
 				+ 'FROM ' + prefix + 'message2 ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND (category.param="board.title" OR category.param="category.title") ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'tag_events_message ON ' + prefix + 'tag_events_message.target_id = ' + prefix + 'message2.unique_id ' + '\n'
+				+ 'LEFT JOIN ' + prefix + 'tags ON ' + prefix + 'tag_events_message.tag_id = ' + prefix + 'tags.tag_id ' + '\n'
 				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
 				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
+				+ 'GROUP BY ' + prefix + 'message2.unique_id '
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
-		Exporter.query(query,
+		getAttachmentsMap(function(err, attachmentsMap) {
+			if (err) callback(err);
+
+			Exporter.query(query,
 				function(err, rows) {
 					if (err) {
 						Exporter.error(err);
@@ -278,11 +385,16 @@ var RTRIMREGEX = /\s+$/g;
 					rows.forEach(function(row, i) {
 						row._title = row._title && row._title.replace(RTRIMREGEX, '') ? row._title : PLACEHOLDER;
 						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? row._content : PLACEHOLDER;
+						row._views = row._views && row._views > 0 ? row._views : 0;
+						row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
+						row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
 						map[row._tid] = row;
 					});
 
 					callback(null, map, rows);
 				});
+		});
+
 	};
 
 	Exporter.countPosts = function(callback) {
@@ -341,7 +453,10 @@ var RTRIMREGEX = /\s+$/g;
 				+ ' ORDER BY ' + prefix + 'message2.post_date \n'
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
-		Exporter.query(query,
+		getAttachmentsMap(function(err, attachmentsMap) {
+			if (err) callback(err);
+
+			Exporter.query(query,
 				function(err, rows) {
 					if (err) {
 						Exporter.error(err);
@@ -351,16 +466,56 @@ var RTRIMREGEX = /\s+$/g;
 					var map = {};
 					rows.forEach(function(row) {
 						if (row._tid === row._toPid) {
-							delete row._toPid;
+							// delete row._toPid;
+							row._toPid = null;
 						}
 						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? row._content : PLACEHOLDER;
+						row._attachments = (attachmentsMap[row._pid] || []).filter(filterNonImage);
+						row._images  = (attachmentsMap[row._pid] || []).filter(filterImage);
 						map[row._pid] = row;
 					});
 
 					callback(null, map);
 				});
+		});
+
 	};
 
+	Exporter.getFavourites = function(callback) {
+		return Exporter.getPaginatedFavourites(0, -1, callback);
+	};
+
+	Exporter.getPaginatedFavourites = function(start, limit, callback) {
+		callback = !_.isFunction(callback) ? noop : callback;
+
+		var prefix = Exporter.config('prefix') || '';
+		var startms = +new Date();
+
+		var query = 'SELECT '
+			// use the name as gid and group by name, since there seems to be duplicate groups names
+			// then in getUsers, use the names in _groups
+			+ prefix + 'tag_events_score_message.event_id as _fid, '
+			+ prefix + 'tag_events_score_message.source_id as _uid, '
+			+ prefix + 'tag_events_score_message.target_id as _pid '
+			+ 'FROM ' + prefix + 'tag_events_score_message '
+			+ 'GROUP BY ' + prefix + 'tag_events_score_message.event_id '
+			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+
+		Exporter.query(query,
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
+				//normalize here
+				var map = {};
+				rows.forEach(function(row) {
+					map[row._gid] = row;
+				});
+
+				callback(null, map);
+			});
+	};
 
 	Exporter.getGroups = function(callback) {
 		return Exporter.getPaginatedGroups(0, -1, callback);
@@ -467,8 +622,14 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				console.log("posts");
 
+				Exporter.getPaginatedFavourites(0, -1, next);
+			},
+			function(next) {
+				console.log("favourites");
+
 				Exporter.teardown(next);
 			}
+
 		], callback);
 	};
 
