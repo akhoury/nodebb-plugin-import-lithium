@@ -238,6 +238,8 @@ var RTRIMREGEX = /\s+$/g;
 		var query = ''
 				+ 'SELECT ' + '\n'
 				+ 'category.node_id as _cid, ' + '\n'
+				+ prefix + 'nodes.hidden as _disabled, ' + '\n'
+				+ prefix + 'nodes.position as _order, ' + '\n'
 				+ prefix + 'nodes.parent_node_id as _parentCid, ' + '\n'
 				+ 'category.nvalue as _name ' + '\n'
 
@@ -377,7 +379,7 @@ var RTRIMREGEX = /\s+$/g;
 				+ prefix + 'message2.user_id as _uid, ' + '\n'
 				+ prefix + 'message2_content.subject as _title, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
-				+ prefix + 'message2.views as _views, ' + '\n'
+				+ prefix + 'message2.views as _viewcount, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
 				+ prefix + 'message2.edit_date as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted, ' + '\n'
