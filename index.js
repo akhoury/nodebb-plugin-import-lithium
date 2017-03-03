@@ -321,6 +321,16 @@ var RTRIMREGEX = /\s+$/g;
 		return /^image/.test(attachment.mime);
 	}
 
+	// find the first (default) img src in a string
+	var _findImgsRE = /<img[^>]+src='?"?([^'"\s>]+)"?\s*\/?>/gi;
+	function findImgSrc (str, options) {
+		options = options || {first: true, last: false, index: 0}
+		var results = _findImgsRE.exec(str || '');
+		if(results) {
+			return results[options.first ? 1 : options.last ? results.length - 1 : options.index + 1];
+		}
+	}
+
 	var getAttachmentsMap = function (callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix');
@@ -412,6 +422,7 @@ var RTRIMREGEX = /\s+$/g;
 						row._views = row._views && row._views > 0 ? row._views : 0;
 						row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
 						row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
+						row._thumb = row._images[0] || findImgSrc(row._content);
 						map[row._tid] = row;
 					});
 
@@ -636,39 +647,40 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				Exporter.setup(config, next);
 			},
+			// function(next) {
+			// 	Exporter.getPaginatedGroups(0, 1000, next);
+			// },
+			// function(next) {
+			// 	console.log("groups");
+            //
+			// 	Exporter.getPaginatedUsers(10000, 10250, next);
+			// },
+			// function(next) {
+			// 	console.log("users");
+            //
+			// 	Exporter.getPaginatedCategories(0, 1000, next);
+			// },
 			function(next) {
-				Exporter.getPaginatedGroups(0, 1000, next);
-			},
-			function(next) {
-				console.log("groups");
-
-				Exporter.getPaginatedUsers(10000, 10250, next);
-			},
-			function(next) {
-				console.log("users");
-
-				Exporter.getPaginatedCategories(0, 1000, next);
-			},
-			function(next) {
-				console.log("categories");
+				// console.log("categories");
 
 				Exporter.getPaginatedTopics(0, 1000, next);
 			},
 			function(next) {
 				console.log("topics");
+				next();
 
-				Exporter.getPaginatedPosts(1001, 2000, next);
+				// Exporter.getPaginatedPosts(1001, 2000, next);
 			},
-			function(next) {
-				console.log("posts");
-
-				Exporter.getPaginatedVotes(0, -1, next);
-			},
-			function(next) {
-				console.log("votes");
-
-				Exporter.teardown(next);
-			}
+			// function(next) {
+			// 	console.log("posts");
+            //
+			// 	Exporter.getPaginatedVotes(0, -1, next);
+			// },
+			// function(next) {
+			// 	console.log("votes");
+            //
+			// 	Exporter.teardown(next);
+			// }
 
 		], callback);
 	};
