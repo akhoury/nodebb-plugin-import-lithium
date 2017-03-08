@@ -32,7 +32,7 @@ var RTRIMREGEX = /\s+$/g;
 			password: config.dbpass || config.pass || config.password || undefined,
 			port: config.dbport || config.port || 3306,
 			database: config.dbname || config.name || config.database || 'lithium',
-            socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
+                        // socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
 
         };
 
