@@ -389,7 +389,7 @@ var RTRIMREGEX = /\s+$/g;
 				+ prefix + 'message2.user_id as _uid, ' + '\n'
 				+ prefix + 'message2_content.subject as _title, ' + '\n'
 				+ prefix + 'message2_content.body as _content, ' + '\n'
-				+ prefix + 'message2.views as _viewcount, ' + '\n'
+				+ 'GREATEST( ' + prefix + 'message2.views, 0) as _viewcount, ' + '\n'
 				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
 				+ prefix + 'message2.edit_date as _edited, ' + '\n'
 				+ prefix + 'message2.deleted as _deleted, ' + '\n'
