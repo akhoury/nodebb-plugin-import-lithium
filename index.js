@@ -427,8 +427,7 @@ var RTRIMREGEX = /\s+$/g;
 						row._views = row._views && row._views > 0 ? row._views : 0;
 						row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
 						row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
-						row._thumb = row._images[0] || replaceLocalImages(findImgSrc(row._content));
-						console.log('row._thumb', row._thumb);
+						row._thumb = row._images[0] ? row._images[0].url || row._images[0] : replaceLocalImages(findImgSrc(row._content));
 						map[row._tid] = row;
 					});
 

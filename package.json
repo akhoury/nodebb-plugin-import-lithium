@@ -1,6 +1,6 @@
 {
   "name": "nodebb-plugin-import-lithium",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "A lithium to NodeBB data exporter",
   "main": "./index.js",
   "scripts": {
