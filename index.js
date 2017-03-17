@@ -32,7 +32,7 @@ var RTRIMREGEX = /\s+$/g;
 			password: config.dbpass || config.pass || config.password || undefined,
 			port: config.dbport || config.port || 3306,
 			database: config.dbname || config.name || config.database || 'lithium',
-                        // socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
+			// socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
 
         };
 
@@ -100,44 +100,6 @@ var RTRIMREGEX = /\s+$/g;
 					callback(null, rows[0]['count(*)']);
 				});
 	};
-
-
-	function geUsersProfileDec (callback) {
-        callback = !_.isFunction(callback) ? noop : callback;
-        var prefix = Exporter.config('prefix') || '';
-
-        Exporter.query('select * from user_profile_dec ', function(err, rows) {
-        	if (err) {
-        		return callback(err)
-			}
-			var map = {};
-			rows.forEach(function(row) {
-				map[row.user_id] = map[row.user_id] || {};
-				if (row.param == 'profile.location') {
-                    map[row.user_id].location = row.nvalue;
-                } else if (row.param == 'profile.signature') {
-                    map[row.user_id].signature = row.nvalue;
-                } else if (row.param == 'profile.url_homepage') {
-                    map[row.user_id].website = row.nvalue;
-                } else if (row.param == 'profile.url_icon' && row.nvalue && !/^avatar:/.test(row.nvalue)) {
-					//todo: i wonder if should be customizeable, via custom options or something, just in case someone didn't want to place them in /uploads/_imported_images ...
-					// one would then write a quick script to cahgne them, but still...
-					map[row.user_id].picture = row.nvalue
-					// to replace these
-					// /t5/image/serverpage/image-id/15729i1DC8C447E1A52650/image-size/avatar?v=mpbl-1&px=64
-					// http://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
-					// https://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
-					// http://ubnt.i.lithium.com/t5/image/serverpage/image-id/90761iE903E8F26321A876/image-size/avatar?v=v2&px=64
-					// https://ubnt.i.lithium.com/t5/image/serverpage/image-id/69492iDE646C12F51EB728/image-size/avatar?v=mpbl-1&px=64
-						.replace(/(.*)\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/g, '/uploads/_imported_images/$2\?')
-					// http://community.ubnt.com/legacyfs/online/avatars/931_wifi-coffee.gif
-						.replace(/(.*)\/legacyfs\/online\/avatars\/(.*)/g, '/uploads/_imported_images/legacy_avatars/$2\?');
-				}
-            });
-            Exporter._usersProfileDec = map;
-			callback(null, map);
-		});
-    }
 
 	Exporter.getUsers = function(callback) {
 		return Exporter.getPaginatedUsers(0, -1, callback);
@@ -285,6 +247,49 @@ var RTRIMREGEX = /\s+$/g;
 				});
 	};
 
+	function replaceLocalImages (img) {
+		// todo: i wonder if should be customizeable, via custom options or something, just in case someone didn't want to place them in /uploads/_imported_images ...
+		// one would then write a quick script to cahgne them, but still...
+
+		return (img || '')
+		// to replace these
+		// /t5/image/serverpage/image-id/15729i1DC8C447E1A52650/image-size/avatar?v=mpbl-1&px=64
+		// http://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
+		// https://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
+		// http://ubnt.i.lithium.com/t5/image/serverpage/image-id/90761iE903E8F26321A876/image-size/avatar?v=v2&px=64
+		// https://ubnt.i.lithium.com/t5/image/serverpage/image-id/69492iDE646C12F51EB728/image-size/avatar?v=mpbl-1&px=64
+			.replace(/(.*)\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/g, '/uploads/_imported_images/$2\?')
+			// http://community.ubnt.com/legacyfs/online/avatars/931_wifi-coffee.gif
+			.replace(/(.*)\/legacyfs\/online\/avatars\/(.*)/g, '/uploads/_imported_images/legacy_avatars/$2\?');
+	}
+
+
+	function geUsersProfileDec (callback) {
+		callback = !_.isFunction(callback) ? noop : callback;
+		var prefix = Exporter.config('prefix') || '';
+
+		Exporter.query('select * from user_profile_dec ', function(err, rows) {
+			if (err) {
+				return callback(err)
+			}
+			var map = {};
+			rows.forEach(function(row) {
+				map[row.user_id] = map[row.user_id] || {};
+				if (row.param == 'profile.location') {
+					map[row.user_id].location = row.nvalue;
+				} else if (row.param == 'profile.signature') {
+					map[row.user_id].signature = row.nvalue;
+				} else if (row.param == 'profile.url_homepage') {
+					map[row.user_id].website = row.nvalue;
+				} else if (row.param == 'profile.url_icon' && row.nvalue && !/^avatar:/.test(row.nvalue)) {
+					map[row.user_id].picture = replaceLocalImages(row.nvalue);
+				}
+			});
+			Exporter._usersProfileDec = map;
+			callback(null, map);
+		});
+	}
+
 	var pad = function (val, len) {
 		val = String(val);
 		len = len || 4;
@@ -322,7 +327,7 @@ var RTRIMREGEX = /\s+$/g;
 	}
 
 	// find the first (default) img src in a string
-	var _findImgsRE = /<img[^>]+src='?"?([^'"\s>]+)"?\s*\/?>/gi;
+	var _findImgsRE = /<img[^>]+src='?"?([^'"\s>]+)'?"?\s*.*\/?>/gi;
 	function findImgSrc (str, options) {
 		options = options || {first: true, last: false, index: 0}
 		var results = _findImgsRE.exec(str || '');
@@ -400,7 +405,7 @@ var RTRIMREGEX = /\s+$/g;
 				+ 'LEFT JOIN ' + prefix + 'tag_events_message ON ' + prefix + 'tag_events_message.target_id = ' + prefix + 'message2.unique_id ' + '\n'
 				+ 'LEFT JOIN ' + prefix + 'tags ON ' + prefix + 'tag_events_message.tag_id = ' + prefix + 'tags.tag_id ' + '\n'
 				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
-				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
+				// + 'AND ' + prefix + 'message2.unique_id = 538376 '+ '\n'
 				+ 'GROUP BY ' + prefix + 'message2.unique_id '
 				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
@@ -422,7 +427,8 @@ var RTRIMREGEX = /\s+$/g;
 						row._views = row._views && row._views > 0 ? row._views : 0;
 						row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
 						row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
-						row._thumb = row._images[0] || findImgSrc(row._content);
+						row._thumb = row._images[0] || replaceLocalImages(findImgSrc(row._content));
+						console.log('row._thumb', row._thumb);
 						map[row._tid] = row;
 					});
 
@@ -647,40 +653,39 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				Exporter.setup(config, next);
 			},
-			// function(next) {
-			// 	Exporter.getPaginatedGroups(0, 1000, next);
-			// },
-			// function(next) {
-			// 	console.log("groups");
-            //
-			// 	Exporter.getPaginatedUsers(10000, 10250, next);
-			// },
-			// function(next) {
-			// 	console.log("users");
-            //
-			// 	Exporter.getPaginatedCategories(0, 1000, next);
-			// },
 			function(next) {
-				// console.log("categories");
+				Exporter.getPaginatedGroups(0, 1000, next);
+			},
+			function(next) {
+				console.log("groups");
+
+				Exporter.getPaginatedUsers(10000, 10250, next);
+			},
+			function(next) {
+				console.log("users");
+
+				Exporter.getPaginatedCategories(0, 1000, next);
+			},
+			function(next) {
+				console.log("categories");
 
 				Exporter.getPaginatedTopics(0, 1000, next);
 			},
-			function(next) {
+ 			function(next) {
 				console.log("topics");
-				next();
 
-				// Exporter.getPaginatedPosts(1001, 2000, next);
+				Exporter.getPaginatedPosts(1001, 2000, next);
 			},
-			// function(next) {
-			// 	console.log("posts");
-            //
-			// 	Exporter.getPaginatedVotes(0, -1, next);
-			// },
-			// function(next) {
-			// 	console.log("votes");
-            //
-			// 	Exporter.teardown(next);
-			// }
+			function(next) {
+				console.log("posts");
+
+				Exporter.getPaginatedVotes(0, -1, next);
+			},
+			function(next) {
+				console.log("votes");
+
+				Exporter.teardown(next);
+			}
 
 		], callback);
 	};
