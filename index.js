@@ -31,10 +31,9 @@ var RTRIMREGEX = /\s+$/g;
 			user: config.dbuser || config.user || 'user',
 			password: config.dbpass || config.pass || config.password || undefined,
 			port: config.dbport || config.port || 3306,
-			database: config.dbname || config.name || config.database || 'lithium',
-			// socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
-
-        };
+			database: config.dbname || config.name || config.database || 'lithium'
+			//, socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
+		};
 
 		Exporter.config(_config);
 		Exporter.config('prefix', config.prefix || config.tablePrefix || '');
@@ -89,16 +88,16 @@ var RTRIMREGEX = /\s+$/g;
 
 		var prefix = Exporter.config('prefix') || '';
 		var query = 'SELECT count(*) '
-				+ 'FROM ' + prefix + 'users_dec ';
+			+ 'FROM ' + prefix + 'users_dec ';
 
 		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					callback(null, rows[0]['count(*)']);
-				});
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
+				callback(null, rows[0]['count(*)']);
+			});
 	};
 
 	Exporter.getUsers = function(callback) {
@@ -111,79 +110,89 @@ var RTRIMREGEX = /\s+$/g;
 		var startms = +new Date();
 
 		var query = ''
-				+ 'SELECT '
-				+ prefix + 'users_dec.id as _uid, ' + '\n'
-				//+ prefix + 'users_dec.secure_id as _suid, ' + '\n'
-				+ prefix + 'users_dec.nlogin as _username, ' + '\n'
-				+ prefix + 'users_dec.login_canon as _alternativeUsername, ' + '\n'
-				//+ prefix + 'users_dec.npasswd as _hashed_password, ' + '\n'
-				+ prefix + 'users_dec.email as _email, ' + '\n'
-				+ prefix + 'users_dec.registration_time as _joindate, ' + '\n'
-				+ prefix + 'users_dec.last_visit_time as _lastonline, ' + '\n'
+			+ 'SELECT '
+			+ prefix + 'users_dec.id as _uid, ' + '\n'
+			//+ prefix + 'users_dec.secure_id as _suid, ' + '\n'
+			+ prefix + 'users_dec.nlogin as _username, ' + '\n'
+			+ prefix + 'users_dec.login_canon as _alternativeUsername, ' + '\n'
+			//+ prefix + 'users_dec.npasswd as _hashed_password, ' + '\n'
+			+ prefix + 'users_dec.email as _email, ' + '\n'
+			+ prefix + 'users_dec.registration_time as _joindate, ' + '\n'
+			+ prefix + 'users_dec.last_visit_time as _lastonline, ' + '\n'
 
-				+ 'bans.deleted as _deleted, ' + '\n'
-				//+ 'bans.date_start as _l_ban_date_start, ' + '\n'
-				//+ 'bans.date_end as _l_ban_date_end, ' + '\n'
+			+ 'bans.deleted as _deleted, ' + '\n'
+			//+ 'bans.date_start as _l_ban_date_start, ' + '\n'
+			//+ 'bans.date_end as _l_ban_date_end, ' + '\n'
 
-				// todo: need to figure out how to map those rankings
-				// + prefix + 'users_dec.ranking_id as _l_ranking_id, ' + '\n'
+			// todo: need to figure out how to map those rankings
+			// + prefix + 'users_dec.ranking_id as _l_ranking_id, ' + '\n'
 
-				+ 'rankings.rank_name as _rank, ' + '\n'
-				+ 'rankings.equals_role as _level, ' + '\n'
-				+ 'roles.name as _role ' + '\n'
+			+ 'rankings.rank_name as _rank, ' + '\n'
+			+ 'rankings.equals_role as _level, ' + '\n'
 
-				+ 'FROM ' + prefix + 'users_dec ' + '\n'
+			+ 'GROUP_CONCAT('+ prefix + 'user_role.role_id) as _groups ' + '\n'
 
-				+ 'LEFT JOIN ' + prefix + 'user_role AS role ON role.role_id=' + prefix + 'users_dec.id ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'roles AS roles ON roles.id=role.role_id ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'user_rankings AS rankings ON rankings.id=' + prefix + 'users_dec.ranking_id ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'user_bans AS bans ON bans.user_id=' + prefix + 'users_dec.id ' + '\n'
+			+ 'FROM ' + prefix + 'users_dec ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'user_role ON user_role.user_id=' + prefix + 'users_dec.id ' + '\n'
 
-				+ 'GROUP BY ' + prefix + 'users_dec.id ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'user_rankings AS rankings ON rankings.id=' + prefix + 'users_dec.ranking_id ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'user_bans AS bans ON bans.user_id=' + prefix + 'users_dec.id ' + '\n'
 
-				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+			+ 'GROUP BY ' + prefix + 'users_dec.id ' + '\n'
+
+			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+
 
 		geUsersProfileDec(function(err, userProfileDecMap) {
-            Exporter.query(query,
-                function(err, rows) {
-                    if (err) {
-                        Exporter.error(err);
-                        return callback(err);
-                    }
+			getAllGroupsFlattened(function (err, groups) {
 
-                    //normalize here
-                    var map = {};
-                    rows.forEach(function(row) {
+				var replaceChildGroupWithRootGroup = function (_gid) {
+					if (!groups[_gid]) {
+						return null;
+					}
+					return groups[_gid]._rootGid ? parseInt(groups[_gid]._rootGid, 10) : parseInt(_gid, 10);
+				};
 
-                        // lower case the email for consistency
-                        row._email = (row._email || '').toLowerCase();
+				Exporter.query(query,
+					function(err, rows) {
+						if (err) {``
+							Exporter.error(err);
+							return callback(err);
+						}
 
-                        var profile = userProfileDecMap[row._uid] || {};
-                        row._signature = profile.signature;
-                        row._location = profile.location;
-                        row._website = Exporter.validateUrl(profile.website);
-                        row._picture = profile.picture;
+						//normalize here
+						var map = {};
+						rows.forEach(function(row) {
 
-                        var gid = row._level || row._role;
-                        if (gid && gid.toLowerCase() !== "administrator" && gid.toLowerCase() !== "moderator") {
-                            row._groups = [gid];
-                        }
+							// lower case the email for consistency
+							row._email = (row._email || '').toLowerCase();
 
-                        if (row._uid == 10) {
-                            row._level = "moderator";
-                        }
+							var profile = userProfileDecMap[row._uid] || {};
+							row._signature = profile.signature;
+							row._location = profile.location;
+							row._website = Exporter.validateUrl(profile.website);
+							row._picture = profile.picture;
+							row._level = row._level ? row._level.toLowerCase() : row._level;
 
-                        // if
-                        // the user was deleted, ban that user
-                        // or if the ban ends  if the future, ban that user
-                        // or if the ban starts if the future, ban that user
-                        row._banned = row._deleted || (row._l_ban_date_start && row._l_ban_date_start > startms) || (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
+							row._groups = row._groups ? csvToArray(row._groups) : [];
+							row._groups = row._groups.map(replaceChildGroupWithRootGroup);
 
-                        map[row._uid] = row;
-                    });
+							row._groups = row._groups.filter(function (_gid, index) {
+								return !!_gid && this.indexOf(_gid) == index;
+							}, row._groups);
 
-                    callback(null, map);
-                });
+							// if
+							// the user was deleted, ban that user
+							// or if the ban ends in the future, ban that user
+							// or if the ban starts in the future, ban that user
+							row._banned = row._deleted || (row._l_ban_date_start && row._l_ban_date_start > startms) || (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
+
+							map[row._uid] = row;
+						});
+
+						callback(null, map);
+					});
+			});
 		});
 	};
 
@@ -198,53 +207,57 @@ var RTRIMREGEX = /\s+$/g;
 		var startms = +new Date();
 
 		var query = ''
-				+ 'SELECT ' + '\n'
-				+ 'category.node_id as _cid, ' + '\n'
-				+ prefix + 'nodes.hidden as _disabled, ' + '\n'
-				+ prefix + 'nodes.position as _order, ' + '\n'
-				+ prefix + 'nodes.parent_node_id as _parentCid, ' + '\n'
-				+ 'category.nvalue as _name ' + '\n'
+			+ 'SELECT \n'
+			+ 'category.node_id as _cid, \n'
+			+ prefix + 'nodes.hidden as _disabled, \n'
+			+ prefix + 'nodes.position as _order, \n'
+			+ prefix + 'nodes.parent_node_id as _parentCid, \n'
+			+ 'category.nvalue as _name, \n'
+			+ 'GROUP_CONCAT(' + prefix + 'roles.name) as _groupNames, \n'
+			+ 'GROUP_CONCAT(' + prefix + 'roles.id) as _gids \n'
 
-				+ 'FROM ' + prefix + 'nodes ' + '\n'
+			+ 'FROM ' + prefix + 'nodes \n'
 
-				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'nodes.node_id '
-				+ 'AND (category.param="board.title" OR category.param="category.title") ' + '\n'
-				+ 'WHERE category.node_id IS NOT NULL \n'
-
-				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+			+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'nodes.node_id AND (category.param="board.title" OR category.param="category.title") \n'
+			+ 'LEFT JOIN ' + prefix + 'roles ON ' + prefix + 'roles.node_id = category.node_id \n'
+			+ 'WHERE category.node_id IS NOT NULL \n'
+			+ 'GROUP BY 1 '
+			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
 
-					//normalize here
-					var map = {};
-					rows.forEach(function(row, i) {
-						map[row._cid] = row;
-					});
-
-					callback(null, map);
+				//normalize here
+				var map = {};
+				rows.forEach(function(row, i) {
+					row._groupNames = csvToArray(row._groupNames);
+					row._gids = csvToArray(row._gids);
+					map[row._cid] = row;
 				});
+
+				callback(null, map);
+			});
 	};
 
 	Exporter.countTopics = function(callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix');
 		var query = 'SELECT count(*) ' + '\n'
-				+ 'FROM ' + prefix + 'message2 ' + '\n'
-				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n';
+			+ 'FROM ' + prefix + 'message2 ' + '\n'
+			+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n';
 
 		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					callback(null, rows[0]['count(*)']);
-				});
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
+				callback(null, rows[0]['count(*)']);
+			});
 	};
 
 	function replaceLocalImages (img) {
@@ -304,14 +317,14 @@ var RTRIMREGEX = /\s+$/g;
 		options = options || {
 				baseUrl: '/uploads/_imported_attachments/',
 				attachmentsDir: path.join(__dirname, '/../../public', '/uploads/_imported_attachments/dat_files')
-		};
+			};
 		var thousand = Math.floor(_aid / 1000)
 		var parentDir = pad(thousand, 4); // todo: what happens if the lithium folders go over 9999?
 		var originalFile = options.attachmentsDir + '/' + parentDir + '/' + pad(_aid, 4) + '.dat';
 		var newFilePath = parentDir + '/' + _aid + '_' + filename;
 		var newFileFullFSPath = path.join(__dirname, '/../../public', '/uploads/_imported_attachments/', newFilePath);
 
-		 // TODO: wtf is that? sync copy? meh
+		// TODO: wtf is that? sync copy? meh
 		if (!fs.existsSync(newFileFullFSPath)) {
 			fs.copySync(originalFile, newFileFullFSPath);
 		}
@@ -388,26 +401,26 @@ var RTRIMREGEX = /\s+$/g;
 		var startms = +new Date();
 
 		var query = ''
-				+ 'SELECT ' + '\n'
-				+ prefix + 'message2.unique_id as _tid, ' + '\n'
-				+ 'category.node_id as _cid, ' + '\n'
-				+ prefix + 'message2.user_id as _uid, ' + '\n'
-				+ prefix + 'message2_content.subject as _title, ' + '\n'
-				+ prefix + 'message2_content.body as _content, ' + '\n'
-				+ 'GREATEST( ' + prefix + 'message2.views, 0) as _viewcount, ' + '\n'
-				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
-				+ prefix + 'message2.edit_date as _edited, ' + '\n'
-				+ prefix + 'message2.deleted as _deleted, ' + '\n'
-				+ 'GROUP_CONCAT('+ prefix + 'tags.tag_text_canon) as _tags ' + '\n'
-				+ 'FROM ' + prefix + 'message2 ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND (category.param="board.title" OR category.param="category.title") ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'tag_events_message ON ' + prefix + 'tag_events_message.target_id = ' + prefix + 'message2.unique_id ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'tags ON ' + prefix + 'tag_events_message.tag_id = ' + prefix + 'tags.tag_id ' + '\n'
-				+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
-				// + 'AND ' + prefix + 'message2.unique_id = 538376 '+ '\n'
-				+ 'GROUP BY ' + prefix + 'message2.unique_id '
-				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+			+ 'SELECT ' + '\n'
+			+ prefix + 'message2.unique_id as _tid, ' + '\n'
+			+ 'category.node_id as _cid, ' + '\n'
+			+ prefix + 'message2.user_id as _uid, ' + '\n'
+			+ prefix + 'message2_content.subject as _title, ' + '\n'
+			+ prefix + 'message2_content.body as _content, ' + '\n'
+			+ 'GREATEST( ' + prefix + 'message2.views, 0) as _viewcount, ' + '\n'
+			+ prefix + 'message2.post_date as _timestamp, ' + '\n'
+			+ prefix + 'message2.edit_date as _edited, ' + '\n'
+			+ prefix + 'message2.deleted as _deleted, ' + '\n'
+			+ 'GROUP_CONCAT('+ prefix + 'tags.tag_text_canon) as _tags ' + '\n'
+			+ 'FROM ' + prefix + 'message2 ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'message2.node_id AND (category.param="board.title" OR category.param="category.title") ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'tag_events_message ON ' + prefix + 'tag_events_message.target_id = ' + prefix + 'message2.unique_id ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'tags ON ' + prefix + 'tag_events_message.tag_id = ' + prefix + 'tags.tag_id ' + '\n'
+			+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
+			// + 'AND ' + prefix + 'message2.unique_id = 538376 '+ '\n'
+			+ 'GROUP BY ' + prefix + 'message2.unique_id '
+			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		getAttachmentsMap(function(err, attachmentsMap) {
 			if (err) callback(err);
@@ -443,20 +456,20 @@ var RTRIMREGEX = /\s+$/g;
 		console.log(Exporter.config('custom'));
 		var prefix = Exporter.config('prefix');
 		var query = 'SELECT count(*) ' + '\n'
-				+ 'FROM ' + prefix + 'message2 ' + '\n'
-				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
-				+ (timemachine.posts.from ? ' AND ' + prefix + 'message2.post_date >= ' + timemachine.posts.from : '')
-                                + (timemachine.posts.to ? ' AND ' + prefix + 'message2.post_date <= ' + timemachine.posts.to : '');
+			+ 'FROM ' + prefix + 'message2 ' + '\n'
+			+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
+			+ (timemachine.posts.from ? ' AND ' + prefix + 'message2.post_date >= ' + timemachine.posts.from : '')
+			+ (timemachine.posts.to ? ' AND ' + prefix + 'message2.post_date <= ' + timemachine.posts.to : '');
 
 
 		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					callback(null, rows[0]['count(*)']);
-				});
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
+				callback(null, rows[0]['count(*)']);
+			});
 	};
 
 	Exporter.getPosts = function(callback) {
@@ -471,27 +484,27 @@ var RTRIMREGEX = /\s+$/g;
 		var startms = +new Date();
 
 		var query = ''
-				+ 'SELECT ' + '\n'
-				+ prefix + 'message2.unique_id as _pid, ' + '\n'
-				+ 'topics.unique_id as _tid, ' + '\n'
-				+ 'parents.unique_id as _toPid, ' + '\n'
+			+ 'SELECT ' + '\n'
+			+ prefix + 'message2.unique_id as _pid, ' + '\n'
+			+ 'topics.unique_id as _tid, ' + '\n'
+			+ 'parents.unique_id as _toPid, ' + '\n'
 
-				+ prefix + 'message2.user_id as _uid, ' + '\n'
-				+ prefix + 'message2_content.body as _content, ' + '\n'
-				+ prefix + 'message2.post_date as _timestamp, ' + '\n'
-				+ prefix + 'message2.edit_date as _edited, ' + '\n'
-				+ prefix + 'message2.deleted as _deleted ' + '\n'
-				+ 'FROM ' + prefix + 'message2 ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
-				+ 'LEFT JOIN ' + prefix + 'message2 AS topics ON topics.id = ' + prefix + 'message2.root_id AND topics.node_id = ' + prefix + 'message2.node_id  \n'
-				+ 'LEFT JOIN ' + prefix + 'message2 AS parents ON parents.id = ' + prefix + 'message2.parent_id AND parents.node_id = ' + prefix + 'message2.node_id  \n'
+			+ prefix + 'message2.user_id as _uid, ' + '\n'
+			+ prefix + 'message2_content.body as _content, ' + '\n'
+			+ prefix + 'message2.post_date as _timestamp, ' + '\n'
+			+ prefix + 'message2.edit_date as _edited, ' + '\n'
+			+ prefix + 'message2.deleted as _deleted ' + '\n'
+			+ 'FROM ' + prefix + 'message2 ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
+			+ 'LEFT JOIN ' + prefix + 'message2 AS topics ON topics.id = ' + prefix + 'message2.root_id AND topics.node_id = ' + prefix + 'message2.node_id  \n'
+			+ 'LEFT JOIN ' + prefix + 'message2 AS parents ON parents.id = ' + prefix + 'message2.parent_id AND parents.node_id = ' + prefix + 'message2.node_id  \n'
 
-				+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
-				// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
-				+ (timemachine.posts.from ? ' AND ' + prefix + 'message2.post_date >= ' + timemachine.posts.from : '')
-                                + (timemachine.posts.to ? ' AND ' + prefix + 'message2.post_date <= ' + timemachine.posts.to : '')
-				+ ' ORDER BY ' + prefix + 'message2.post_date \n'
-				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+			+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
+			// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
+			+ (timemachine.posts.from ? ' AND ' + prefix + 'message2.post_date >= ' + timemachine.posts.from : '')
+			+ (timemachine.posts.to ? ' AND ' + prefix + 'message2.post_date <= ' + timemachine.posts.to : '')
+			+ ' ORDER BY ' + prefix + 'message2.post_date \n'
+			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		getAttachmentsMap(function(err, attachmentsMap) {
 			if (err) callback(err);
@@ -532,8 +545,6 @@ var RTRIMREGEX = /\s+$/g;
 		var startms = +new Date();
 
 		var query = 'SELECT '
-			// use the name as gid and group by name, since there seems to be duplicate groups names
-			// then in getUsers, use the names in _groups
 			+ prefix + 'tag_events_score_message.event_id as _vid, '
 			+ prefix + 'tag_events_score_message.source_id as _uid, '
 			+ prefix + 'users_dec.email as _uemail, '
@@ -573,11 +584,8 @@ var RTRIMREGEX = /\s+$/g;
 			});
 	};
 
-	Exporter.getGroups = function(callback) {
-		return Exporter.getPaginatedGroups(0, -1, callback);
-	};
 
-	Exporter.getPaginatedGroups = function(start, limit, callback) {
+	var getAllGroupsFlattened = function(callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 
 		var prefix = Exporter.config('prefix') || '';
@@ -585,31 +593,122 @@ var RTRIMREGEX = /\s+$/g;
 
 		var query = 'SELECT '
 
-				// use the name as gid and group by name, since there seems to be duplicate groups names
-				// then in getUsers, use the names in _groups
-				+ prefix + 'roles.name as _gid, '
+			+ prefix + 'roles.id as _gid, '
+			+ prefix + 'roles.name as _name, '
 
-				+ prefix + 'roles.name as _name '
+			+ prefix + 'roles.node_id as _mainCid, '
+			+ 'parent_category.node_id as _parentCid, '
 
-				+ 'FROM ' + prefix + 'roles '
-				+ 'WHERE ' + prefix + 'roles.name != "Administrator" '
-				+ 'GROUP BY ' + prefix + 'roles.name '
-				+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+			+ 'category.nvalue as _mainCategoryName, '
+			+ 'parent_category.nvalue as _parentCategoryName, '
+			+ 'count(' + prefix + 'user_role.user_id) as _usersCount, '
+
+			+ prefix + 'roles.deleted as _deleted '
+			+ 'FROM ' + prefix + 'roles '
+			+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'roles.node_id AND (category.param="board.title" OR category.param="category.title") '
+			+ 'LEFT JOIN ' + prefix + 'nodes on category.node_id = ' + prefix + 'nodes.node_id '
+			+ 'LEFT JOIN ' + prefix + 'settings AS parent_category ON parent_category.node_id = ' + prefix + 'nodes.parent_node_id AND (parent_category.param="board.title" OR parent_category.param="category.title") '
+			+ 'LEFT JOIN ' + prefix + 'user_role ON ' + prefix + 'roles.id = ' + prefix + 'user_role.role_id '
+			+ 'LEFT JOIN ' + prefix + 'users_dec ON ' + prefix + 'users_dec.id = ' + prefix + 'user_role.user_id /* AND ' + prefix + 'roles.node_id = 1 */ '
+			+ 'WHERE 1 = 1 '
+
+			// + 'AND ' + prefix + 'roles.deleted != 1 '
+
+			+ 'AND ' + prefix + 'roles.name != "No PM" '
+			+ 'AND ' + prefix + 'roles.name != "No Sig" '
+
+			/*
+			 + 'AND ' + prefix + 'roles.name != "Moderator" '
+			 + 'AND ' + prefix + 'roles.name != "Regional Moderator" '
+			 + 'AND ' + prefix + 'roles.name != "Community Team" '
+			 + 'AND ' + prefix + 'roles.name!= "Banned Users" '
+			 */
+			+ 'GROUP BY 1 ';
 
 		Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					//normalize here
-					var map = {};
-					rows.forEach(function(row) {
-						map[row._gid] = row;
-					});
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
 
-					callback(null, map);
+				var map = {};
+
+				var rootGroups = {};
+				var rootGroupsByName = {};
+
+				var childGroups = {};
+				var childGroupsByName = {};
+
+				var allGroups = {};
+
+				rows.forEach(function(row) {
+					if (row._parentCid) {
+						row._root = false;
+						childGroups[row._gid] = row;
+						childGroupsByName[row._name] = row;
+					} else {
+						row._root = true;
+						rootGroups[row._gid] = row;
+						rootGroupsByName[row._name] = row;
+					}
+					allGroups[row._gid] = row;
 				});
+
+				var findRootGroup = function (_gid) {
+					var group = allGroups[_gid];
+					if (!group) {
+						return null;
+					}
+					if (!group._parentCid) {
+						return _gid;
+					}
+					var rootGroup = rootGroupsByName[group._name];
+					if (!rootGroup) {
+						return _gid;
+					}
+					return rootGroup._gid;
+				}
+
+				Object.keys(childGroups).forEach(function (_gid) {
+					var row = childGroups[_gid];
+					var mainCid = row._mainCid;
+					row._rootGid = findRootGroup(_gid);
+					if (row._rootGid && rootGroups[row._rootGid]) {
+						rootGroups[row._rootGid]._cids = rootGroups[row._rootGid]._cids || [];
+						rootGroups[row._rootGid]._cids.push(mainCid);
+					}
+				});
+				callback(null, allGroups);
+			});
+	};
+
+	Exporter.getGroups = function(callback) {
+		return Exporter.getPaginatedGroups(0, -1, callback);
+	};
+
+	Exporter.getPaginatedGroups = function(start, limit, callback) {
+		callback = !_.isFunction(callback) ? noop : callback;
+
+		getAllGroupsFlattened(function (err, groups) {
+			var map = {};
+
+			Object.keys(groups).forEach(function(_gid) {
+				var group = groups[_gid];
+				if (group._root && !group._deleted && group._usersCount > 0) {
+					group._system = 0;
+					group._hidden = 0;
+					if (group._cids && group._cids.length) {
+						group._private = 1;
+						group._disableJoinRequests = 1;
+						group._userTitleEnabled = 1;
+					}
+					map[group._gid] = group;
+				}
+			});
+
+			callback(null, map);
+		});
 	};
 
 
@@ -658,7 +757,7 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				console.log("groups");
 
-				Exporter.getPaginatedUsers(10000, 10250, next);
+				Exporter.getPaginatedUsers(10000, 1000, next);
 			},
 			function(next) {
 				console.log("users");
@@ -670,7 +769,7 @@ var RTRIMREGEX = /\s+$/g;
 
 				Exporter.getPaginatedTopics(0, 1000, next);
 			},
- 			function(next) {
+			function(next) {
 				console.log("topics");
 
 				Exporter.getPaginatedPosts(1001, 2000, next);
