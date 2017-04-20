@@ -5,9 +5,6 @@ var mysql = require('mysql');
 var fs = require('fs-extra');
 var path = require('path');
 
-
-//var utils = module.parent.require('../../public/src/utils.js');
-
 var _ = require('underscore');
 var noop = function(){};
 var logPrefix = '[nodebb-plugin-import-lithium]';
@@ -32,7 +29,7 @@ var RTRIMREGEX = /\s+$/g;
 			password: config.dbpass || config.pass || config.password || undefined,
 			port: config.dbport || config.port || 3306,
 			database: config.dbname || config.name || config.database || 'lithium'
-			//, socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
+			// , socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
 		};
 
 		Exporter.config(_config);
@@ -260,23 +257,6 @@ var RTRIMREGEX = /\s+$/g;
 			});
 	};
 
-	function replaceLocalImages (img) {
-		// todo: i wonder if should be customizeable, via custom options or something, just in case someone didn't want to place them in /uploads/_imported_images ...
-		// one would then write a quick script to cahgne them, but still...
-
-		return (img || '')
-		// to replace these
-		// /t5/image/serverpage/image-id/15729i1DC8C447E1A52650/image-size/avatar?v=mpbl-1&px=64
-		// http://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
-		// https://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
-		// http://ubnt.i.lithium.com/t5/image/serverpage/image-id/90761iE903E8F26321A876/image-size/avatar?v=v2&px=64
-		// https://ubnt.i.lithium.com/t5/image/serverpage/image-id/69492iDE646C12F51EB728/image-size/avatar?v=mpbl-1&px=64
-			.replace(/(.*)\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/g, '/uploads/_imported_images/$2\?')
-			// http://community.ubnt.com/legacyfs/online/avatars/931_wifi-coffee.gif
-			.replace(/(.*)\/legacyfs\/online\/avatars\/(.*)/g, '/uploads/_imported_images/legacy_avatars/$2\?');
-	}
-
-
 	function geUsersProfileDec (callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix') || '';
@@ -291,11 +271,11 @@ var RTRIMREGEX = /\s+$/g;
 				if (row.param == 'profile.location') {
 					map[row.user_id].location = row.nvalue;
 				} else if (row.param == 'profile.signature') {
-					map[row.user_id].signature = row.nvalue;
+					map[row.user_id].signature = replaceLiImages(row.nvalue);
 				} else if (row.param == 'profile.url_homepage') {
 					map[row.user_id].website = row.nvalue;
 				} else if (row.param == 'profile.url_icon' && row.nvalue && !/^avatar:/.test(row.nvalue)) {
-					map[row.user_id].picture = replaceLocalImages(row.nvalue);
+					map[row.user_id].picture = replaceLocalImage(row.nvalue);
 				}
 			});
 			Exporter._usersProfileDec = map;
@@ -317,8 +297,8 @@ var RTRIMREGEX = /\s+$/g;
 		options = options || {
 				baseUrl: '/uploads/_imported_attachments/',
 				attachmentsDir: path.join(__dirname, '/../../public', '/uploads/_imported_attachments/dat_files')
-			};
-		var thousand = Math.floor(_aid / 1000)
+		};
+		var thousand = Math.floor(_aid / 1000);
 		var parentDir = pad(thousand, 4); // todo: what happens if the lithium folders go over 9999?
 		var originalFile = options.attachmentsDir + '/' + parentDir + '/' + pad(_aid, 4) + '.dat';
 		var newFilePath = parentDir + '/' + _aid + '_' + filename;
@@ -330,7 +310,7 @@ var RTRIMREGEX = /\s+$/g;
 		}
 
 		return options.baseUrl + newFilePath;
-	}
+	};
 
 	function filterNonImage (attachment) {
 		return !filterImage(attachment);
@@ -342,14 +322,43 @@ var RTRIMREGEX = /\s+$/g;
 	// find the first (default) img src in a string
 	var _findImgsRE = /<img[^>]+src='?"?([^'"\s>]+)'?"?\s*.*\/?>/gi;
 	function findImgSrc (str, options) {
-		options = options || {first: true, last: false, index: 0}
+		options = options || {first: true, last: false, index: 0};
 		var results = _findImgsRE.exec(str || '');
 		if(results) {
 			return results[options.first ? 1 : options.last ? results.length - 1 : options.index + 1];
 		}
 	}
 
-	var getAttachmentsMap = function (callback) {
+
+    function replaceLocalImage (img) {
+        // todo: i wonder if should be customizeable, via custom options or something, just in case someone didn't want to place them in /uploads/_imported_images ...
+        // one would then write a quick script to cahgne them, but still...
+
+        return (img || '')
+        // to replace these
+        // /t5/image/serverpage/image-id/15729i1DC8C447E1A52650/image-size/avatar?v=mpbl-1&px=64
+        // http://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
+        // https://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
+        // http://ubnt.i.lithium.com/t5/image/serverpage/image-id/90761iE903E8F26321A876/image-size/avatar?v=v2&px=64
+        // https://ubnt.i.lithium.com/t5/image/serverpage/image-id/69492iDE646C12F51EB728/image-size/avatar?v=mpbl-1&px=64
+            .replace(/(.*)\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/g, '/uploads/_imported_images/$2\?')
+            // http://community.ubnt.com/legacyfs/online/avatars/931_wifi-coffee.gif
+            .replace(/(.*)\/legacyfs\/online\/avatars\/(.*)/g, '/uploads/_imported_images/legacy_avatars/$2\?');
+    }
+
+    function replaceLiImages (content) {
+		content = content || '';
+
+		//todo: redundant, use replaceLocalImage()
+		content = content.replace(/(http.*)?\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/ig, '/uploads/_imported_images/$2\?');
+        content = content.replace(/(http.*)?\/legacyfs\/online\/avatars\/(.*)/ig, '/uploads/_imported_images/legacy_avatars/$2\?');
+
+        content = content.replace(/<li-image[^>]+id='?"?([^'"\s>]+)'?"?/ig, '<li-image src="/uploads/_imported_images/$1"');
+        content = content.replace(/li-image/ig, 'img');
+        return content;
+    }
+
+    var getAttachmentsMap = function (callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix');
 
@@ -436,11 +445,11 @@ var RTRIMREGEX = /\s+$/g;
 					var map = {};
 					rows.forEach(function(row, i) {
 						row._title = row._title && row._title.replace(RTRIMREGEX, '') ? row._title : PLACEHOLDER;
-						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? row._content : PLACEHOLDER;
+						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
 						row._views = row._views && row._views > 0 ? row._views : 0;
 						row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
 						row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
-						row._thumb = row._images[0] ? row._images[0].url || row._images[0] : replaceLocalImages(findImgSrc(row._content));
+						row._thumb = row._images[0] ? row._images[0].url || row._images[0] : replaceLocalImage(findImgSrc(row._content));
 						map[row._tid] = row;
 					});
 
@@ -522,7 +531,7 @@ var RTRIMREGEX = /\s+$/g;
 							// delete row._toPid;
 							row._toPid = null;
 						}
-						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? row._content : PLACEHOLDER;
+						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
 						row._attachments = (attachmentsMap[row._pid] || []).filter(filterNonImage);
 						row._images  = (attachmentsMap[row._pid] || []).filter(filterImage);
 						map[row._pid] = row;
