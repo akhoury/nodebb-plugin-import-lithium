@@ -702,9 +702,10 @@ var RTRIMREGEX = /\s+$/g;
 		getAllGroupsFlattened(function (err, groups) {
 			var map = {};
 
-			groups = groups.slice(start, limit == -1 ? groups.length : start + limit);
+			var keys = Object.keys(groups);
+			keys = keys.slice(start, limit == -1 ? keys.length : start + limit);
 
-			Object.keys(groups).forEach(function(_gid) {
+			keys.forEach(function(_gid) {
 				var group = groups[_gid];
 				if (group._root && !group._deleted && group._usersCount > 0) {
 					group._system = 0;
