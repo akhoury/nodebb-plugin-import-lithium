@@ -29,7 +29,7 @@ var RTRIMREGEX = /\s+$/g;
 			password: config.dbpass || config.pass || config.password || undefined,
 			port: config.dbport || config.port || 3306,
 			database: config.dbname || config.name || config.database || 'lithium'
-			// , socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
+			, socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
 		};
 
 		Exporter.config(_config);
@@ -127,15 +127,17 @@ var RTRIMREGEX = /\s+$/g;
 			+ 'rankings.rank_name as _rank, ' + '\n'
 			+ 'rankings.equals_role as _level, ' + '\n'
 
-			+ 'GROUP_CONCAT('+ prefix + 'user_role.role_id) as _groups ' + '\n'
+			+ 'GROUP_CONCAT('+ prefix + 'user_role.role_id) as _groups, ' + '\n'
+			+ 'GROUP_CONCAT('+ prefix + 'roles.name) as _groupsNames ' + '\n'
+
 
 			+ 'FROM ' + prefix + 'users_dec ' + '\n'
 			+ 'LEFT JOIN ' + prefix + 'user_role ON user_role.user_id=' + prefix + 'users_dec.id ' + '\n'
-
+			+ 'LEFT JOIN ' + prefix + 'roles ON ' + prefix + 'roles.id=' + prefix + 'user_role.role_id ' + '\n'
 			+ 'LEFT JOIN ' + prefix + 'user_rankings AS rankings ON rankings.id=' + prefix + 'users_dec.ranking_id ' + '\n'
 			+ 'LEFT JOIN ' + prefix + 'user_bans AS bans ON bans.user_id=' + prefix + 'users_dec.id ' + '\n'
 
-			+ 'GROUP BY ' + prefix + 'users_dec.id ' + '\n'
+			+ 'GROUP BY 1 ' + '\n'
 
 			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
@@ -169,9 +171,10 @@ var RTRIMREGEX = /\s+$/g;
 							row._location = profile.location;
 							row._website = Exporter.validateUrl(profile.website);
 							row._picture = profile.picture;
-							row._level = row._level ? row._level.toLowerCase() : row._level;
 
 							row._groups = row._groups ? csvToArray(row._groups) : [];
+							row._groupsNames = row._groupsNames ? csvToArray(row._groupsNames) : [];
+
 							row._groups = row._groups.map(replaceChildGroupWithRootGroup);
 
 							row._groups = row._groups.filter(function (_gid, index) {
@@ -182,7 +185,17 @@ var RTRIMREGEX = /\s+$/g;
 							// the user was deleted, ban that user
 							// or if the ban ends in the future, ban that user
 							// or if the ban starts in the future, ban that user
-							row._banned = row._deleted || (row._l_ban_date_start && row._l_ban_date_start > startms) || (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
+							row._banned = row._deleted
+							|| row._groupsNames.indexOf('Banned Users') > -1
+							|| (row._l_ban_date_start && row._l_ban_date_start > startms)
+							|| (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
+
+							if (!row._banned) {
+								row._level = row._groupsNames.indexOf('Administrator') > -1
+									? "administrator" : row._groupsNames.indexOf('Moderator') > -1
+										? "Moderator" : row._level
+											? row._level.toLowerCase() : row._level;
+							}
 
 							map[row._uid] = row;
 						});
@@ -623,15 +636,6 @@ var RTRIMREGEX = /\s+$/g;
 
 			// + 'AND ' + prefix + 'roles.deleted != 1 '
 
-			+ 'AND ' + prefix + 'roles.name != "No PM" '
-			+ 'AND ' + prefix + 'roles.name != "No Sig" '
-
-			/*
-			 + 'AND ' + prefix + 'roles.name != "Moderator" '
-			 + 'AND ' + prefix + 'roles.name != "Regional Moderator" '
-			 + 'AND ' + prefix + 'roles.name != "Community Team" '
-			 + 'AND ' + prefix + 'roles.name!= "Banned Users" '
-			 */
 			+ 'GROUP BY 1 ';
 
 		Exporter.query(query,
@@ -696,6 +700,16 @@ var RTRIMREGEX = /\s+$/g;
 		return Exporter.getPaginatedGroups(0, -1, callback);
 	};
 
+	var IGNORED_GROUPS = {
+		"No PM": 1,
+		"No Sig": 1,
+		"Administrator": 1,
+		"Moderator": 1,
+		"Regional Moderator": 1,
+		"Community Team": 1,
+		"Banned Users": 1
+	}
+
 	Exporter.getPaginatedGroups = function(start, limit, callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 
@@ -707,7 +721,7 @@ var RTRIMREGEX = /\s+$/g;
 
 			keys.forEach(function(_gid) {
 				var group = groups[_gid];
-				if (group._root && !group._deleted && group._usersCount > 0) {
+				if (group._root && !group._deleted && group._usersCount > 0 && !IGNORED_GROUPS[group._name]) {
 					group._system = 0;
 					group._hidden = 0;
 					if (group._cids && group._cids.length) {
