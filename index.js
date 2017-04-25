@@ -118,8 +118,6 @@ var RTRIMREGEX = /\s+$/g;
 			+ prefix + 'users_dec.last_visit_time as _lastonline, ' + '\n'
 
 			+ 'bans.deleted as _deleted, ' + '\n'
-			//+ 'bans.date_start as _l_ban_date_start, ' + '\n'
-			//+ 'bans.date_end as _l_ban_date_end, ' + '\n'
 
 			// todo: need to figure out how to map those rankings
 			// + prefix + 'users_dec.ranking_id as _l_ranking_id, ' + '\n'
@@ -129,7 +127,6 @@ var RTRIMREGEX = /\s+$/g;
 
 			+ 'GROUP_CONCAT('+ prefix + 'user_role.role_id) as _groups, ' + '\n'
 			+ 'GROUP_CONCAT('+ prefix + 'roles.name) as _groupsNames ' + '\n'
-
 
 			+ 'FROM ' + prefix + 'users_dec ' + '\n'
 			+ 'LEFT JOIN ' + prefix + 'user_role ON user_role.user_id=' + prefix + 'users_dec.id ' + '\n'
@@ -154,7 +151,7 @@ var RTRIMREGEX = /\s+$/g;
 
 				Exporter.query(query,
 					function(err, rows) {
-						if (err) {``
+						if (err) {
 							Exporter.error(err);
 							return callback(err);
 						}
@@ -183,12 +180,7 @@ var RTRIMREGEX = /\s+$/g;
 
 							// if
 							// the user was deleted, ban that user
-							// or if the ban ends in the future, ban that user
-							// or if the ban starts in the future, ban that user
-							row._banned = row._deleted
-							|| row._groupsNames.indexOf('Banned Users') > -1
-							|| (row._l_ban_date_start && row._l_ban_date_start > startms)
-							|| (row._l_ban_date_end && row._l_ban_date_end > startms) ? 1 : 0;
+							row._banned = row._deleted || row._groupsNames.indexOf('Banned Users') > -1 ? 1 : 0;
 
 							if (!row._banned) {
 								row._level = row._groupsNames.indexOf('Administrator') > -1
@@ -231,7 +223,8 @@ var RTRIMREGEX = /\s+$/g;
 			+ 'LEFT JOIN ' + prefix + 'settings AS category ON category.node_id = ' + prefix + 'nodes.node_id AND (category.param="board.title" OR category.param="category.title") \n'
 			+ 'LEFT JOIN ' + prefix + 'roles ON ' + prefix + 'roles.node_id = category.node_id \n'
 			+ 'WHERE category.node_id IS NOT NULL \n'
-			+ 'GROUP BY 1 '
+			+ 'AND ' + prefix + 'nodes.deleted != 1 \n'
+			+ 'GROUP BY 1 \n'
 			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		Exporter.query(query,
@@ -441,7 +434,7 @@ var RTRIMREGEX = /\s+$/g;
 			+ 'LEFT JOIN ' + prefix + 'tags ON ' + prefix + 'tag_events_message.tag_id = ' + prefix + 'tags.tag_id ' + '\n'
 			+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
 			// + 'AND ' + prefix + 'message2.unique_id = 538376 '+ '\n'
-			+ 'GROUP BY ' + prefix + 'message2.unique_id '
+			+ 'GROUP BY 1 '
 			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
 		getAttachmentsMap(function(err, attachmentsMap) {
@@ -714,6 +707,8 @@ var RTRIMREGEX = /\s+$/g;
 		callback = !_.isFunction(callback) ? noop : callback;
 
 		getAllGroupsFlattened(function (err, groups) {
+			if (err) {throw err;}
+
 			var map = {};
 
 			var keys = Object.keys(groups);
@@ -783,7 +778,7 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				console.log("groups");
 
-				Exporter.getPaginatedUsers(10000, 1000, next);
+				Exporter.getPaginatedUsers(0, 1000, next);
 			},
 			function(next) {
 				console.log("users");
@@ -798,7 +793,7 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				console.log("topics");
 
-				Exporter.getPaginatedPosts(1001, 2000, next);
+				Exporter.getPaginatedPosts(0, 2000, next);
 			},
 			function(next) {
 				console.log("posts");
