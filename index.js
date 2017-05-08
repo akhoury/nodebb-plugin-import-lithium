@@ -28,8 +28,8 @@ var RTRIMREGEX = /\s+$/g;
 			user: config.dbuser || config.user || 'user',
 			password: config.dbpass || config.pass || config.password || undefined,
 			port: config.dbport || config.port || 3306,
-			database: config.dbname || config.name || config.database || 'lithium'
-			// , socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock'
+			database: config.dbname || config.name || config.database || 'lithium',
+			socketPath: config.socketPath // '/Applications/MAMP/tmp/mysql/mysql.sock'
 		};
 
 		Exporter.config(_config);
@@ -135,6 +135,7 @@ var RTRIMREGEX = /\s+$/g;
 			+ 'LEFT JOIN ' + prefix + 'user_bans AS bans ON bans.user_id=' + prefix + 'users_dec.id ' + '\n'
 
 			+ 'GROUP BY 1 ' + '\n'
+			+ 'ORDER BY ' + prefix + 'users_dec.id DESC ' + '\n'
 
 			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
@@ -198,6 +199,52 @@ var RTRIMREGEX = /\s+$/g;
 		});
 	};
 
+
+	Exporter.getMessages = function(callback) {
+		return Exporter.getPaginatedMessages(0, -1, callback);
+	};
+
+	Exporter.getPaginatedMessages = function(start, limit, callback) {
+		callback = !_.isFunction(callback) ? noop : callback;
+
+		var prefix = Exporter.config('prefix') || '';
+		var startms = +new Date();
+
+		var query = ''
+			+ 'SELECT '
+			+ prefix + 'tblia_notes_content.note_id as _mid, \n'
+			+ prefix + 'tblia_notes_content.body as _content, \n'
+			+ prefix + 'tblia_notes_content.sender_user_id as _fromuid, \n'
+			+ 'GROUP_CONCAT(DISTINCT tblia_notes_inbox.recipient_user_id) as _touids, \n'
+			+ prefix + 'tblia_notes_content.sent_time as _timestamp \n'
+			+ 'FROM ' + prefix + 'tblia_notes_content \n'
+			+ 'LEFT JOIN ' + prefix + 'tblia_notes_inbox on ' + prefix + 'tblia_notes_inbox.note_id = ' + prefix + 'tblia_notes_content.note_id \n'
+			+ 'LEFT JOIN ' + prefix + 'tblia_notes_outbox on ' + prefix + 'tblia_notes_outbox.note_id = ' + prefix + 'tblia_notes_content.note_id \n'
+			+ 'GROUP BY 1 '
+			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+
+				Exporter.query(query,
+					function(err, rows) {
+						if (err) {
+							Exporter.error(err);
+							return callback(err);
+						}
+
+						//normalize here
+						var map = {};
+						rows.forEach(function(row) {
+							row._touids = csvToArray(row._touids);
+							row._touids = row._touids.filter(function (_touid, index) {
+								return !!_touid && this.indexOf(_touid) == index;
+							}, row._touids);
+
+							map[row._mid] = row;
+						});
+
+						callback(null, map);
+					});
+	};
+
 	Exporter.getCategories = function(callback) {
 		return Exporter.getPaginatedCategories(0, -1, callback);
 	};
@@ -214,6 +261,8 @@ var RTRIMREGEX = /\s+$/g;
 			+ prefix + 'nodes.hidden as _disabled, \n'
 			+ prefix + 'nodes.position as _order, \n'
 			+ prefix + 'nodes.parent_node_id as _parentCid, \n'
+			+ prefix + 'nodes.display_id as _slug, \n'
+
 			+ 'category.nvalue as _name, \n'
 			+ 'GROUP_CONCAT(' + prefix + 'roles.name) as _groupNames, \n'
 			+ 'GROUP_CONCAT(' + prefix + 'roles.id) as _gids \n'
@@ -308,6 +357,7 @@ var RTRIMREGEX = /\s+$/g;
 		var parentDir = pad(thousand, 4); // todo: what happens if the lithium folders go over 9999?
 		var originalFile = options.attachmentsDir + '/' + parentDir + '/' + pad(_aid, 4) + '.dat';
 		var newFilePath = parentDir + '/' + _aid + '_' + filename;
+
 		var newFileFullFSPath = path.join(__dirname, '/../../public', '/uploads/_imported_attachments/', newFilePath);
 
 		// TODO: wtf is that? sync copy? meh
@@ -347,17 +397,17 @@ var RTRIMREGEX = /\s+$/g;
         // https://community.ubnt.com/t5/image/serverpage/image-id/303i4EB092C27479A960/image-size/avatar?v=mpbl-1&px=64
         // http://ubnt.i.lithium.com/t5/image/serverpage/image-id/90761iE903E8F26321A876/image-size/avatar?v=v2&px=64
         // https://ubnt.i.lithium.com/t5/image/serverpage/image-id/69492iDE646C12F51EB728/image-size/avatar?v=mpbl-1&px=64
-            .replace(/(.*)\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/g, '/uploads/_imported_images/$2\?')
+            .replace(/(.*)\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?>/g, '/uploads/_imported_images/$2\?')
             // http://community.ubnt.com/legacyfs/online/avatars/931_wifi-coffee.gif
-            .replace(/(.*)\/legacyfs\/online\/avatars\/(.*)/g, '/uploads/_imported_images/legacy_avatars/$2\?');
+            .replace(/(.*)\/legacyfs\/online\/avatars\/(.*)>/g, '/uploads/_imported_images/legacy_avatars/$2\?');
     }
 
     function replaceLiImages (content) {
 		content = content || '';
 
 		//todo: redundant, use replaceLocalImage()
-		content = content.replace(/(http.*)?\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?/ig, '/uploads/_imported_images/$2\?');
-        content = content.replace(/(http.*)?\/legacyfs\/online\/avatars\/(.*)/ig, '/uploads/_imported_images/legacy_avatars/$2\?');
+		content = content.replace(/(http.*)?\/t\d*\/image\/serverpage\/image-id\/(\w+)\/image-size\/.*\?>/ig, '/uploads/_imported_images/$2\?');
+        content = content.replace(/(http.*)?\/legacyfs\/online\/avatars\/(.*)>/ig, '/uploads/_imported_images/legacy_avatars/$2\?');
 
         content = content.replace(/<li-image[^>]+id='?"?([^'"\s>]+)'?"?/ig, '<li-image src="/uploads/_imported_images/$1"');
         content = content.replace(/li-image/ig, 'img');
@@ -762,6 +812,9 @@ var RTRIMREGEX = /\s+$/g;
 			},
 			function(next) {
 				Exporter.getUsers(next);
+			},
+			function(next) {
+				Exporter.getMessages(next);
 			},
 			function(next) {
 				Exporter.getCategories(next);
