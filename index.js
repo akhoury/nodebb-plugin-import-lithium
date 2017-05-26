@@ -316,6 +316,11 @@ var RTRIMREGEX = /\s+$/g;
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix') || '';
 
+		if (Exporter['_usersProfileDec']) {
+			return callback(null, Exporter['_usersProfileDec']);
+		}
+
+
 		Exporter.query('select * from user_profile_dec ', function(err, rows) {
 			if (err) {
 				return callback(err)
@@ -331,9 +336,13 @@ var RTRIMREGEX = /\s+$/g;
 					map[row.user_id].website = row.nvalue;
 				} else if (row.param == 'profile.url_icon' && row.nvalue && !/^avatar:/.test(row.nvalue)) {
 					map[row.user_id].picture = replaceLocalImage(row.nvalue);
+				} else if (row.param == 'user.last_visit_ipaddress') {
+					map[row.user_id].last_visit_ipaddress = row.nvalue;
 				}
 			});
+
 			Exporter._usersProfileDec = map;
+
 			callback(null, map);
 		});
 	}
@@ -414,6 +423,38 @@ var RTRIMREGEX = /\s+$/g;
         return content;
     }
 
+	var getUserlogMap = function (callback) {
+		callback = !_.isFunction(callback) ? noop : callback;
+		var prefix = Exporter.config('prefix');
+
+		if (Exporter['_userLogMap']) {
+			return callback(null, Exporter['_userLogMap']);
+		}
+
+		var query = 'SELECT '
+			+ prefix + 'user_log.login_time as _login_time, '
+			+ prefix + 'user_log.logout_time as _logout_time, '
+			+ prefix + 'user_log.ip as _ip, '
+			+ prefix + 'user_log.user_id as _uid '
+			+ 'FROM ' + prefix + 'user_log '
+
+		Exporter.query(query,
+			function(err, rows) {
+				if (err) {
+					Exporter.error(err);
+					return callback(err);
+				}
+				var map = {};
+				rows.forEach(function(row) {
+					map[row._uid] = map[row._uid] || [];
+					map[row._uid].push(row);
+				});
+
+				Exporter['_userLogMap'] = map;
+				callback(err, map);
+			});
+	};
+
     var getAttachmentsMap = function (callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
 		var prefix = Exporter.config('prefix');
@@ -456,6 +497,25 @@ var RTRIMREGEX = /\s+$/g;
 			});
 	};
 
+    var findPostIp = function (userlogMap, _uid, _timestamp, usersProfileDecMap) {
+    	var logs = userlogMap[_uid] || [];
+    	var ip;
+		logs.some(function (log) {
+    		if (log._login_time >= _timestamp && (log._logout_time <= _timestamp || log._logout_time < 0)) {
+				ip = log._ip;
+				return true;
+			}
+			ip = log._ip;
+		});
+
+		if (!ip && usersProfileDecMap && usersProfileDecMap[_uid]) {
+			var profile = usersProfileDecMap[_uid];
+			ip = profile.last_visit_ipaddress;
+		}
+
+		return ip;
+	};
+
 	Exporter.getTopics = function(callback) {
 		return Exporter.getPaginatedTopics(0, -1, callback);
 	};
@@ -476,6 +536,10 @@ var RTRIMREGEX = /\s+$/g;
 			+ prefix + 'message2.post_date as _timestamp, ' + '\n'
 			+ prefix + 'message2.edit_date as _edited, ' + '\n'
 			+ prefix + 'message2.deleted as _deleted, ' + '\n'
+
+			// too slow
+			// + prefix + 'user_log.ip as _ip, ' + '\n'
+
 			+ 'GROUP_CONCAT('+ prefix + 'tags.tag_text_canon) as _tags, ' + '\n'
 
 			+ prefix + 'message_status_values.status_id as _status_id, ' + '\n'
@@ -493,35 +557,55 @@ var RTRIMREGEX = /\s+$/g;
 			+ 'LEFT JOIN ' + prefix + 'message_status_latest_status_view ON ' + prefix + 'message_status_latest_status_view.message_uid = ' + prefix + 'message2.unique_id ' + '\n'
 			+ 'LEFT JOIN ' + prefix + 'message_status_values ON ' + prefix + 'message_status_values.status_id = ' + prefix + 'message_status_latest_status_view.status_id ' + '\n'
 
+			/*
+			+ 'LEFT JOIN ' + prefix + 'user_log ON ' + prefix + 'user_log.user_id = ' + prefix + 'message2.user_id '
+			+ ' AND ' + prefix + 'user_log.login_time <= ' + prefix + 'message2.post_date \n'
+			+ ' AND ' + prefix + 'user_log.logout_time >= ' + prefix + 'message2.post_date \n'
+			*/
+
 			+ 'WHERE ' + prefix + 'message2.id = ' + prefix + 'message2.root_id ' + '\n'
 			// + 'AND ' + prefix + 'message2.unique_id = 538376 '+ '\n'
 			+ 'GROUP BY 1 '
 			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
-		getAttachmentsMap(function(err, attachmentsMap) {
-			if (err) callback(err);
+		geUsersProfileDec(function (err, usersProfileDecMap) {
+			getUserlogMap(function (err, userLogMap) {
+				getAttachmentsMap(function(err, attachmentsMap) {
+					if (err) callback(err);
 
-			Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
+					Exporter.query(query,
+						function(err, rows) {
+							if (err) {
+								Exporter.error(err);
+								return callback(err);
+							}
 
-					//normalize here
-					var map = {};
-					rows.forEach(function(row, i) {
-						row._title = row._title && row._title.replace(RTRIMREGEX, '') ? row._title : PLACEHOLDER;
-						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
-						row._views = row._views && row._views > 0 ? row._views : 0;
-						row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
-						row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
-						row._thumb = row._images[0] ? row._images[0].url || row._images[0] : replaceLocalImage(findImgSrc(row._content));
-						map[row._tid] = row;
-					});
+							//normalize here
+							var map = {};
 
-					callback(null, map, rows);
+							var wip = 0;
+
+							rows.forEach(function(row, i) {
+								row._title = row._title && row._title.replace(RTRIMREGEX, '') ? row._title : PLACEHOLDER;
+								row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
+								row._views = row._views && row._views > 0 ? row._views : 0;
+								row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
+								row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
+								row._thumb = row._images[0] ? row._images[0].url || row._images[0] : replaceLocalImage(findImgSrc(row._content));
+
+								row._ip = findPostIp(userLogMap, row._uid, row._timestamp, usersProfileDecMap);
+								if (row._ip) {
+									wip++;
+								}
+								map[row._tid] = row;
+							});
+
+							console.log('topics with-ip', wip + '/' + rows.length);
+
+							callback(null, map, rows);
+						});
 				});
+			});
 		});
 
 	};
@@ -569,11 +653,21 @@ var RTRIMREGEX = /\s+$/g;
 			+ prefix + 'message2_content.body as _content, ' + '\n'
 			+ prefix + 'message2.post_date as _timestamp, ' + '\n'
 			+ prefix + 'message2.edit_date as _edited, ' + '\n'
+
+			// too slow
+			// + prefix + 'user_log.ip as _ip, ' + '\n'
+
 			+ prefix + 'message2.deleted as _deleted ' + '\n'
 			+ 'FROM ' + prefix + 'message2 ' + '\n'
 			+ 'LEFT JOIN ' + prefix + 'message2_content ON ' + prefix + 'message2_content.unique_id = ' + prefix + 'message2.unique_id ' + '\n'
 			+ 'LEFT JOIN ' + prefix + 'message2 AS topics ON topics.id = ' + prefix + 'message2.root_id AND topics.node_id = ' + prefix + 'message2.node_id  \n'
 			+ 'LEFT JOIN ' + prefix + 'message2 AS parents ON parents.id = ' + prefix + 'message2.parent_id AND parents.node_id = ' + prefix + 'message2.node_id  \n'
+
+			/*
+			+ 'LEFT JOIN ' + prefix + 'user_log ON ' + prefix + 'user_log.user_id = ' + prefix + 'message2.user_id '
+			+ ' AND ' + prefix + 'user_log.login_time <= ' + prefix + 'message2.post_date \n'
+			+ ' AND ' + prefix + 'user_log.logout_time >= ' + prefix + 'message2.post_date \n'
+			*/
 
 			+ 'WHERE ' + prefix + 'message2.id != ' + prefix + 'message2.root_id ' + '\n'
 			// + 'AND ' + prefix + 'message2.user_id != -1 '+ '\n'
@@ -582,32 +676,44 @@ var RTRIMREGEX = /\s+$/g;
 			+ ' ORDER BY ' + prefix + 'message2.post_date \n'
 			+ (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
-		getAttachmentsMap(function(err, attachmentsMap) {
-			if (err) callback(err);
+		geUsersProfileDec(function (err, usersProfileDecMap) {
+			getUserlogMap(function (err, userLogMap) {
+				getAttachmentsMap(function(err, attachmentsMap) {
+					if (err) callback(err);
 
-			Exporter.query(query,
-				function(err, rows) {
-					if (err) {
-						Exporter.error(err);
-						return callback(err);
-					}
-					//normalize here
-					var map = {};
-					rows.forEach(function(row) {
-						if (row._tid === row._toPid) {
-							// delete row._toPid;
-							row._toPid = null;
-						}
-						row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
-						row._attachments = (attachmentsMap[row._pid] || []).filter(filterNonImage);
-						row._images  = (attachmentsMap[row._pid] || []).filter(filterImage);
-						map[row._pid] = row;
-					});
+					Exporter.query(query,
+						function(err, rows) {
+							if (err) {
+								Exporter.error(err);
+								return callback(err);
+							}
+							//normalize here
+							var map = {};
 
-					callback(null, map);
+							var wip = 0;
+
+							rows.forEach(function(row) {
+								if (row._tid === row._toPid) {
+									// delete row._toPid;
+									row._toPid = null;
+								}
+								row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
+								row._attachments = (attachmentsMap[row._pid] || []).filter(filterNonImage);
+								row._images  = (attachmentsMap[row._pid] || []).filter(filterImage);
+								row._ip = findPostIp(userLogMap, row._uid, row._timestamp, usersProfileDecMap);
+								if (row._ip) {
+									wip++;
+								}
+								map[row._pid] = row;
+							});
+
+							console.log('posts with-ip', wip + '/' + rows.length);
+
+							callback(null, map);
+						});
 				});
+			});
 		});
-
 	};
 
 	Exporter.getVotes = function(callback) {
@@ -807,18 +913,18 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				Exporter.setup(config, next);
 			},
-			function(next) {
-				Exporter.getGroups(next);
-			},
-			function(next) {
-				Exporter.getUsers(next);
-			},
-			function(next) {
-				Exporter.getMessages(next);
-			},
-			function(next) {
-				Exporter.getCategories(next);
-			},
+			// function(next) {
+			// 	Exporter.getGroups(next);
+			// },
+			// function(next) {
+			// 	Exporter.getUsers(next);
+			// },
+			// function(next) {
+			// 	Exporter.getMessages(next);
+			// },
+			// function(next) {
+			// 	Exporter.getCategories(next);
+			// },
 			function(next) {
 				Exporter.getTopics(next);
 			},
@@ -836,24 +942,24 @@ var RTRIMREGEX = /\s+$/g;
 			function(next) {
 				Exporter.setup(config, next);
 			},
-			function(next) {
-				Exporter.getPaginatedGroups(0, 1000, next);
-			},
-			function(next) {
-				console.log("groups");
-
-				Exporter.getPaginatedUsers(0, 1000, next);
-			},
-			function(next) {
-				console.log("users");
-
-				Exporter.getPaginatedCategories(0, 1000, next);
-			},
-			function(next) {
-				console.log("categories");
-
-				Exporter.getPaginatedTopics(0, 1000, next);
-			},
+			// function(next) {
+			// 	Exporter.getPaginatedGroups(0, 1000, next);
+			// },
+			// function(next) {
+			// 	console.log("groups");
+            //
+			// 	Exporter.getPaginatedUsers(0, 1000, next);
+			// },
+			// function(next) {
+			// 	console.log("users");
+            //
+			// 	Exporter.getPaginatedCategories(0, 1000, next);
+			// },
+			// function(next) {
+			// 	console.log("categories");
+            //
+			// 	Exporter.getPaginatedTopics(0, 1000, next);
+			// },
 			function(next) {
 				console.log("topics");
 
@@ -864,11 +970,11 @@ var RTRIMREGEX = /\s+$/g;
 
 				Exporter.getPaginatedVotes(0, -1, next);
 			},
-			function(next) {
-				console.log("votes");
-
-				Exporter.teardown(next);
-			}
+			// function(next) {
+			// 	console.log("votes");
+            //
+			// 	Exporter.teardown(next);
+			// }
 
 		], callback);
 	};
