@@ -331,7 +331,7 @@ var RTRIMREGEX = /\s+$/g;
 				if (row.param == 'profile.location') {
 					map[row.user_id].location = row.nvalue;
 				} else if (row.param == 'profile.signature') {
-					map[row.user_id].signature = replaceLiImages(row.nvalue);
+					map[row.user_id].signature = replaceLiTags(row.nvalue);
 				} else if (row.param == 'profile.url_homepage') {
 					map[row.user_id].website = row.nvalue;
 				} else if (row.param == 'profile.url_icon' && row.nvalue && !/^avatar:/.test(row.nvalue)) {
@@ -422,6 +422,21 @@ var RTRIMREGEX = /\s+$/g;
         content = content.replace(/li-image/ig, 'img');
         return content;
     }
+
+	function replaceLiUsers (content) {
+		content = content || '';
+		content = content.replace(/<li-user[^>]+login='?"?([^'"\s]+)'?"?>/ig, '<li-user>@$1');
+		content = content.replace(/li-user/ig, 'span');
+		return content;
+	}
+
+	function replaceLiTags (content) {
+		content = content || '';
+		content = replaceLiImages(content);
+		content = replaceLiUsers(content);
+		return content;
+	}
+
 
 	var getUserlogMap = function (callback) {
 		callback = !_.isFunction(callback) ? noop : callback;
@@ -587,7 +602,7 @@ var RTRIMREGEX = /\s+$/g;
 
 							rows.forEach(function(row, i) {
 								row._title = row._title && row._title.replace(RTRIMREGEX, '') ? row._title : PLACEHOLDER;
-								row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
+								row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiTags(row._content) : PLACEHOLDER;
 								row._views = row._views && row._views > 0 ? row._views : 0;
 								row._attachments = (attachmentsMap[row._tid] || []).filter(filterNonImage);
 								row._images  = (attachmentsMap[row._tid] || []).filter(filterImage);
@@ -697,7 +712,7 @@ var RTRIMREGEX = /\s+$/g;
 									// delete row._toPid;
 									row._toPid = null;
 								}
-								row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiImages(row._content) : PLACEHOLDER;
+								row._content = row._content && row._content.replace(RTRIMREGEX, '') ? replaceLiTags(row._content) : PLACEHOLDER;
 								row._attachments = (attachmentsMap[row._pid] || []).filter(filterNonImage);
 								row._images  = (attachmentsMap[row._pid] || []).filter(filterImage);
 								row._ip = findPostIp(userLogMap, row._uid, row._timestamp, usersProfileDecMap);
